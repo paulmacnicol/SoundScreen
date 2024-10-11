@@ -1,0 +1,65 @@
+version: '3.8'
+services:
+  db:
+    image: mariadb:latest
+    container_name: soundscreen_db
+    env_file:
+      - ./db/db.env
+    volumes:
+      - ./db/data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    networks:
+      - soundscreen-net
+
+  app:
+    build: ./app
+    container_name: soundscreen_app
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "5000:5000"
+    networks:
+      - soundscreen-net
+    depends_on:
+      - db
+
+  webserver:
+    build: ./webserver
+    container_name: soundscreen_web
+    ports:
+      - "3000:3000"
+    networks:
+      - soundscreen-net
+
+  control:
+    build: ./control
+    container_name: soundscreen_control
+    ports:
+      - "4000:4000"
+    networks:
+      - soundscreen-net
+
+
+  nginx:
+    build: ./nginx
+    container_name: soundscreen_nginx
+    volumes:
+      - /etc/letsencrypt/live/soundscreen.soundcheckvn.com:/etc/letsencrypt/live/soundscreen.soundcheckvn.com:ro
+      - /etc/letsencrypt/archive/soundscreen.soundcheckvn.com:/etc/letsencrypt/archive/soundscreen.soundcheckvn.com:ro
+
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+      - webserver
+      - control
+    networks:
+      - soundscreen-net
+
+networks:
+  soundscreen-net:
+    name: soundscreen-net
+    driver: bridge

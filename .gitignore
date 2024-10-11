@@ -1,0 +1,5 @@
+# Exclude the MariaDB data folder
+db/data/
+
+# Exclude Docker volumes or other temporary files
+*.log
