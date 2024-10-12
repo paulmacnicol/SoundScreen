@@ -1,0 +1,189 @@
+/* Basic reset and typography */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* Main container */
+.home-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.hero-section {
+  background-image: url('./assets/hero-background.jpg'); /* Path inside src */
+  background-size: cover;
+  background-position: center;
+  padding: 100px 20px;
+  color: white;
+  text-align: center;
+}
+
+.hero-title {
+  font-size: 48px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.hero-subtitle {
+  font-size: 24px;
+  margin-bottom: 30px;
+}
+
+.cta-button {
+  background-color: #ff5733;
+  color: white;
+  padding: 15px 30px;
+  border: none;
+  font-size: 18px;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.cta-button:hover {
+  background-color: #c43d23;
+}
+
+/* Features Section */
+.features-section {
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.section-title {
+  font-size: 36px;
+  margin-bottom: 40px;
+  color: #333;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 30px;
+}
+
+.feature-item {
+  background-color: #f9f9f9;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.feature-item i {
+  font-size: 40px;
+  margin-bottom: 20px;
+  color: #ff5733;
+}
+
+.feature-item h3 {
+  font-size: 24px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.feature-item p {
+  font-size: 16px;
+  color: #666;
+}
+
+/* How It Works Section */
+.how-it-works-section {
+  padding: 60px 20px;
+  background-color: #f0f0f0;
+  text-align: center;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 30px;
+}
+
+.step-item {
+  background-color: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.step-item i {
+  font-size: 40px;
+  margin-bottom: 20px;
+  color: #ff5733;
+}
+
+.step-item h3 {
+  font-size: 22px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.step-item p {
+  font-size: 16px;
+  color: #666;
+}
+
+/* Testimonials Section */
+.testimonials-section {
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.testimonial {
+  background-color: #f9f9f9;
+  padding: 40px;
+  border-radius: 10px;
+  max-width: 800px;
+  margin: 0 auto;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.testimonial-text {
+  font-size: 18px;
+  color: #555;
+  margin-bottom: 20px;
+}
+
+.testimonial-author {
+  font-size: 16px;
+  font-style: italic;
+  color: #333;
+}
+
+/* Footer */
+.footer {
+  background-color: #333;
+  padding: 40px 20px;
+  color: white;
+  text-align: center;
+}
+
+.footer-content p {
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+.footer .cta-button {
+  background-color: #ff5733;
+  color: white;
+  padding: 15px 30px;
+  border: none;
+  font-size: 18px;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.footer .cta-button:hover {
+  background-color: #c43d23;
+}
