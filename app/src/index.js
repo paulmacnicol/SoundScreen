@@ -144,29 +144,44 @@ app.delete('/api/areas/:areaId', authenticateJWT, (req, res) => {
   });
 });
 
-// Add a new site with subscription check
+// Add a new site - Removed subscription checks
 app.post('/api/sites', authenticateJWT, (req, res) => {
   const userId = req.user.userId;
   const { name } = req.body;
 
-  const subscriptionQuery = 'SELECT subscription_type FROM users WHERE id = ?';
-  db.execute(subscriptionQuery, [userId], (err, results) => {
+  const insertQuery = 'INSERT INTO sites (user_id, name) VALUES (?, ?)';
+  db.execute(insertQuery, [userId, name], (err, results) => {
     if (err) return res.status(500).json({ message: 'Database error', error: err });
+    res.status(201).json({ message: 'Site created successfully', siteId: results.insertId });
+  });
+});
 
-    const subscriptionType = results[0].subscription_type;
-    const siteLimit = getSiteLimit(subscriptionType);
+// Add a new area
+app.post('/api/areas', authenticateJWT, (req, res) => {
+  const { siteId, name } = req.body;
+  const insertAreaQuery = 'INSERT INTO areas (site_id, name) VALUES (?, ?)';
+  db.execute(insertAreaQuery, [siteId, name], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Failed to add area', error: err });
+    res.status(201).json({ message: 'Area added successfully!', areaId: results.insertId });
+  });
 
-    const siteCountQuery = 'SELECT COUNT(*) AS siteCount FROM sites WHERE user_id = ?';
-    db.execute(siteCountQuery, [userId], (err, countResult) => {
-      if (err) return res.status(500).json({ message: 'Database error', error: err });
-      if (countResult[0].siteCount >= siteLimit) return res.status(403).json({ message: 'Site limit reached' });
+});// Add a new device
+app.post('/api/devices', authenticateJWT, (req, res) => {
+  const { areaId, name } = req.body;
+  const insertDeviceQuery = 'INSERT INTO devices (area_id, name) VALUES (?, ?)';
+  db.execute(insertDeviceQuery, [areaId, name], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Failed to add device', error: err });
+    res.status(201).json({ message: 'Device added successfully!', deviceId: results.insertId });
+  });
+});
 
-      const insertQuery = 'INSERT INTO sites (user_id, name) VALUES (?, ?)';
-      db.execute(insertQuery, [userId, name], (err, results) => {
-        if (err) return res.status(500).json({ message: 'Database error', error: err });
-        res.status(201).json({ message: 'Site created successfully' });
-      });
-    });
+// Fetch devices for a specific area
+app.get('/api/areas/:areaId/devices', authenticateJWT, (req, res) => {
+  const { areaId } = req.params;
+  const deviceQuery = 'SELECT * FROM devices WHERE area_id = ?';
+  db.execute(deviceQuery, [areaId], (err, devices) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    res.status(200).json({ devices });
   });
 });
 
@@ -179,6 +194,23 @@ app.put('/api/sites/:siteId/settings', authenticateJWT, (req, res) => {
     if (err) return res.status(500).json({ message: 'Database error', error: err });
     res.status(200).json({ message: 'Settings updated successfully' });
   });
+});
+
+app.get('/api/sites/:siteId/areas', authenticateJWT, async (req, res) => {
+  const { siteId } = req.params;
+
+  try {
+    const [areaResults] = await db.promise().execute('SELECT * FROM areas WHERE site_id = ?', [siteId]);
+
+    if (areaResults.length === 0) {
+      return res.status(404).json({ message: 'No areas found for this site.' });
+    }
+
+    res.status(200).json({ areas: areaResults });
+  } catch (error) {
+    console.error('Error fetching areas:', error);
+    return res.status(500).json({ message: 'Server error', error });
+  }
 });
 
 // Function to determine site limits based on subscription type
