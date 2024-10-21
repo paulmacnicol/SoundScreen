@@ -9,23 +9,32 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    const data = await response.json();
-    if (response.ok) {
-      setMessage('Login successful!');
-      localStorage.setItem('token', data.token); // Store JWT in localStorage
-      localStorage.setItem('site', JSON.stringify(data.site)); // Store site in localStorage
-      localStorage.setItem('area', JSON.stringify(data.area)); // Store area in localStorage
-      history.push('/control-panel'); // Redirect to the control panel
-    } else {
-      setMessage(data.message || 'Login failed.');
+      const data = await response.json();
+      
+      if (response.ok) {
+        setMessage('Login successful!');
+        localStorage.setItem('token', data.token); // Store JWT in localStorage
+        localStorage.setItem('site', JSON.stringify(data.site)); // Store site in localStorage
+        localStorage.setItem('area', JSON.stringify(data.area)); // Store area in localStorage
+
+        // Instead of history.push, use window.location.href to ensure proper redirect
+        window.location.href = '/control-panel';
+      } else {
+        setMessage(data.message || 'Login failed.');
+      }
+    } catch (error) {
+      setMessage('An error occurred during login. Please try again later.');
+      console.error('Login error:', error);
     }
   };
 

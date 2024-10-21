@@ -55,7 +55,8 @@ app.post('/api/signup', async (req, res) => {
     await db.promise().execute(insertAreaQuery, [siteId, 'Main Area']);
 
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
-    return res.status(201).json({ message: 'User created', token });
+    return res.status(201).json({ message: 'User created successfully, please login' });
+
   } catch (error) {
     console.error('Signup error:', error);
     return res.status(500).json({ message: 'Server error', error });
