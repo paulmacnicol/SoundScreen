@@ -2,44 +2,81 @@ import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 
 function ControlPanel() {
-  const [site, setSite] = useState(null);
-  const [sites, setSites] = useState([]);
-  const [area, setArea] = useState(null);
-  const [areas, setAreas] = useState([]);
-  const [devices, setDevices] = useState([]);
+  const [site, setSite] = useState(null);  // Current selected site
+  const [sites, setSites] = useState([]);  // All sites for the user
+  const [area, setArea] = useState(null);  // Current selected area
+  const [areas, setAreas] = useState([]);  // All areas for the current site
+  const [devices, setDevices] = useState([]);  // Devices in the selected area
   const [newSiteName, setNewSiteName] = useState('');
   const [newAreaName, setNewAreaName] = useState('');
   const [newDeviceName, setNewDeviceName] = useState('');
   const [message, setMessage] = useState('');
   const history = useHistory();
 
+  // Fetch sites and set default site and area on component mount
   useEffect(() => {
-    if (site) {  // Change from `selectedSite` to `site`
-      const fetchAreas = async () => {
-        const token = localStorage.getItem('token');
-        try {
-          const response = await fetch(`/api/sites/${site.id}/areas`, {  // Also change `selectedSite` to `site` here
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-  
-          if (response.ok) {
-            const data = await response.json();
-            setAreas(data.areas || []); // Update the areas state based on the selected site
-          } else {
-            console.error('Failed to fetch areas.');
-            setAreas([]); // Clear the areas if there is an error to avoid inconsistent state
+    let isMounted = true;  // Flag to check if the component is still mounted
+
+    const fetchSitesAndAreas = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const response = await fetch('/api/sites', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // Ensure the sites property exists in the response
+          if (isMounted) {
+            const fetchedSites = data.site ? [data.site] : [];  // Use empty array if sites is undefined
+            setSites(fetchedSites);
+
+            // Automatically select the first site if available
+            if (fetchedSites.length > 0) {
+              const firstSite = fetchedSites[0];
+              setSite(firstSite);
+
+              // Fetch areas for the first site
+              const areasResponse = await fetch(`/api/sites/${firstSite.id}/areas`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+
+              if (areasResponse.ok) {
+                const areasData = await areasResponse.json();
+                setAreas(areasData.areas || []);
+
+                // Automatically select the first area if available
+                if (areasData.areas && areasData.areas.length > 0) {
+                  setArea(areasData.areas[0]);
+                  fetchDevices(areasData.areas[0].id);
+                }
+              }
+            } else {
+              setMessage('No sites found.');
+            }
           }
-        } catch (error) {
-          console.error('An error occurred while fetching areas:', error);
-          setAreas([]); // Reset the state to ensure consistent UI behavior
+        } else {
+          setMessage('Failed to load sites.');
         }
-      };
-  
-      fetchAreas();
-    }
-  }, [site]); 
+      } catch (error) {
+        if (isMounted) {
+          console.error('Error fetching sites:', error);
+          setMessage('An error occurred while fetching sites.');
+        }
+      }
+    };
+
+    fetchSitesAndAreas();
+
+    return () => {
+      isMounted = false;  // Cleanup function to avoid memory leaks
+    };
+  }, []);
 
   const fetchDevices = async (areaId) => {
     const token = localStorage.getItem('token');
@@ -49,10 +86,14 @@ function ControlPanel() {
           'Authorization': `Bearer ${token}`,
         },
       });
-
+  
       if (response.ok) {
         const data = await response.json();
-        setDevices(data.devices);
+        // Handle case when there are no devices for the selected area
+        setDevices(data.devices || []);
+        if (data.devices.length === 0) {
+          setMessage('No devices available for this area.');
+        }
       } else {
         setMessage('Failed to load devices.');
       }
@@ -60,7 +101,8 @@ function ControlPanel() {
       setMessage('An error occurred while fetching devices.');
     }
   };
-
+  
+  // Add a new site
   const handleAddSite = async () => {
     const token = localStorage.getItem('token');
     try {
@@ -87,6 +129,7 @@ function ControlPanel() {
     }
   };
 
+// Add a new area and automatically select it
 const handleAddArea = async () => {
   const token = localStorage.getItem('token');
   if (!site) {
@@ -106,17 +149,61 @@ const handleAddArea = async () => {
 
     if (response.ok) {
       const data = await response.json();
-      setAreas(prevAreas => [...prevAreas, { id: data.areaId, name: newAreaName }]);
+      const newArea = { id: data.areaId, name: newAreaName || `Area ${data.areaId}` };
+      setAreas([...areas, newArea]);
       setNewAreaName('');
+
+      // Automatically select the new area
+      setArea(newArea);
+      fetchDevices(newArea.id);
     } else {
-      console.error('Failed to add area.');
+      setMessage('Failed to add area.');
     }
   } catch (error) {
-    console.error('An error occurred while adding area:', error);
+    setMessage('An error occurred while adding an area.');
   }
 };
 
+// When a site is selected, automatically select the first area
+const handleSiteChange = async (siteId) => {
+  const updatedSite = sites.find(s => s.id === siteId);
+  setSite(updatedSite);
+
+  if (updatedSite) {
+    setAreas([]); // Clear previous areas
+    setArea(null); // Clear area selection
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`/api/sites/${siteId}/areas`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAreas(data.areas || []);
+
+        // Automatically select the first area if available
+        if (data.areas && data.areas.length > 0) {
+          const firstArea = data.areas[0];
+          setArea(firstArea);
+          fetchDevices(firstArea.id);  // Automatically fetch devices for the first area
+        }
+      } else {
+        setMessage('Failed to fetch areas.');
+      }
+    } catch (error) {
+      console.error('Error fetching areas:', error);
+    }
+  } else {
+    setAreas([]);
+    setDevices([]);
+  }
+};
+ 
   
+  // Add a new device
   const handleAddDevice = async () => {
     if (!area) {
       setMessage('Please select an area before adding a device.');
@@ -151,42 +238,13 @@ const handleAddArea = async () => {
   return (
     <div>
       <h1>Manager's Control Panel</h1>
+
       <h3>Selected Site</h3>
       <select
         value={site?.id || ''}
-        onChange={(e) => {
-          const updatedSite = sites.find(s => s.id === parseInt(e.target.value));
-          setSite(updatedSite);
-          if (updatedSite) {
-            setAreas([]); // Clear previous areas
-            setArea(null); // Clear area selection
-            // Fetch areas associated with the new site
-            const fetchAreas = async () => {
-              const token = localStorage.getItem('token');
-              try {
-                const response = await fetch(`/api/sites/${updatedSite.id}/areas`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                  },
-                });
-                if (response.ok) {
-                  const data = await response.json();
-                  setAreas(data.areas || []);
-                } else {
-                  console.error('Failed to fetch areas.');
-                }
-              } catch (error) {
-                console.error('Error fetching areas:', error);
-              }
-            };
-            fetchAreas();
-          } else {
-            setAreas([]);
-            setDevices([]);
-          }
-        }}
-        
+        onChange={(e) => handleSiteChange(parseInt(e.target.value))}
       >
+        <option value="" disabled>Select a site</option>
         {sites.map((site) => (
           <option key={site.id} value={site.id}>{site.name}</option>
         ))}

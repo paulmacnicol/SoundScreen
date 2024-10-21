@@ -21,6 +21,8 @@ function Login() {
     if (response.ok) {
       setMessage('Login successful!');
       localStorage.setItem('token', data.token); // Store JWT in localStorage
+      localStorage.setItem('site', JSON.stringify(data.site)); // Store site in localStorage
+      localStorage.setItem('area', JSON.stringify(data.area)); // Store area in localStorage
       history.push('/control-panel'); // Redirect to the control panel
     } else {
       setMessage(data.message || 'Login failed.');
