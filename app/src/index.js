@@ -168,6 +168,23 @@ app.post('/api/areas', authenticateJWT, (req, res) => {
     res.status(201).json({ message: 'Area added successfully!', areaId: results.insertId });
   });
 });
+// Rename an area
+app.put('/api/areas/:areaId', authenticateJWT, (req, res) => {
+  const { areaId } = req.params;
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ message: 'Area name is required' });
+  }
+
+  const query = 'UPDATE areas SET name = ? WHERE id = ?';
+  db.execute(query, [name, areaId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    if (results.affectedRows === 0) return res.status(404).json({ message: 'Area not found' });
+
+    res.status(200).json({ message: 'Area renamed successfully' });
+  });
+});
 
 // Rename a site
 app.put('/api/sites/:siteId', authenticateJWT, (req, res) => {

@@ -201,6 +201,69 @@ const handleSiteChange = async (siteId) => {
     setDevices([]);
   }
 };
+
+// Rename the selected site
+const handleRenameSite = async () => {
+  if (!site) {
+    setMessage('Please select a site to rename.');
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  try {
+    const response = await fetch(`/api/sites/${site.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: newSiteName }),
+    });
+
+    if (response.ok) {
+      const updatedSites = sites.map(s => s.id === site.id ? { ...s, name: newSiteName } : s);
+      setSites(updatedSites);
+      setNewSiteName('');
+      setMessage('Site renamed successfully!');
+    } else {
+      setMessage('Failed to rename site.');
+    }
+  } catch (error) {
+    setMessage('An error occurred while renaming the site.');
+  }
+};
+
+// Rename the selected area
+const handleRenameArea = async () => {
+  if (!area) {
+    setMessage('Please select an area to rename.');
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  try {
+    const response = await fetch(`/api/areas/${area.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: newAreaName }),
+    });
+
+    if (response.ok) {
+      const updatedAreas = areas.map(a => a.id === area.id ? { ...a, name: newAreaName } : a);
+      setAreas(updatedAreas);
+      setNewAreaName('');
+      setMessage('Area renamed successfully!');
+    } else {
+      setMessage('Failed to rename area.');
+    }
+  } catch (error) {
+    setMessage('An error occurred while renaming the area.');
+  }
+};
+
  
   
   // Add a new device
@@ -257,6 +320,8 @@ const handleSiteChange = async (siteId) => {
         placeholder="New Site Name"
       />
       <button onClick={handleAddSite}>Add Site</button>
+      <button onClick={handleRenameSite}>Rename Site</button>
+
 
       <h3>Selected Area</h3>
       <select
@@ -281,6 +346,8 @@ const handleSiteChange = async (siteId) => {
         placeholder="New Area Name"
       />
       <button onClick={handleAddArea}>Add Area</button>
+      <button onClick={handleRenameArea}>Rename Area</button>
+
 
       <h3>Devices in Selected Area</h3>
       {devices.length > 0 ? (
