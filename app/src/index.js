@@ -96,22 +96,41 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Fetch the current site and areas for the authenticated user
+// Fetch all sites and areas for the authenticated user
 app.get('/api/sites', authenticateJWT, (req, res) => {
   const userId = req.user.userId;
+
+  // Fetch all sites for the user
   const siteQuery = 'SELECT * FROM sites WHERE user_id = ?';
   db.execute(siteQuery, [userId], (err, sites) => {
     if (err) return res.status(500).json({ message: 'Database error', error: err });
     if (sites.length === 0) return res.status(404).json({ message: 'No sites found for user' });
 
-    const siteId = sites[0].id;
-    const areaQuery = 'SELECT * FROM areas WHERE site_id = ?';
-    db.execute(areaQuery, [siteId], (err, areas) => {
+    // Get the list of site IDs
+    const siteIds = sites.map(site => site.id);
+
+    // Dynamically generate placeholders for the site IDs
+    const placeholders = siteIds.map(() => '?').join(',');
+
+    const areaQuery = `SELECT * FROM areas WHERE site_id IN (${placeholders})`;
+    
+    // Execute the query with the siteIds as individual arguments
+    db.execute(areaQuery, siteIds, (err, areas) => {
       if (err) return res.status(500).json({ message: 'Database error', error: err });
-      res.status(200).json({ site: sites[0], areas });
+
+      // Attach areas to the correct sites
+      const sitesWithAreas = sites.map(site => ({
+        ...site,
+        areas: areas.filter(area => area.site_id === site.id)
+      }));
+
+      // Return all sites with their associated areas
+      res.status(200).json({ sites: sitesWithAreas });
     });
   });
 });
+
+
 
 // Fetch areas for a specific site
 app.get('/api/sites/:siteId/areas', authenticateJWT, (req, res) => {

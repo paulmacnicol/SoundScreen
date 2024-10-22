@@ -25,31 +25,31 @@ function ControlPanel() {
             'Authorization': `Bearer ${token}`,
           },
         });
-
+    
         if (response.ok) {
           const data = await response.json();
-
-          // Ensure the sites property exists in the response
+    
           if (isMounted) {
-            const fetchedSites = data.site ? [data.site] : [];  // Use empty array if sites is undefined
+            // This line handles both single and multiple site cases
+            const fetchedSites = Array.isArray(data.sites) ? data.sites : [data.site];
             setSites(fetchedSites);
-
+    
             // Automatically select the first site if available
             if (fetchedSites.length > 0) {
               const firstSite = fetchedSites[0];
               setSite(firstSite);
-
+    
               // Fetch areas for the first site
               const areasResponse = await fetch(`/api/sites/${firstSite.id}/areas`, {
                 headers: {
                   'Authorization': `Bearer ${token}`,
                 },
               });
-
+    
               if (areasResponse.ok) {
                 const areasData = await areasResponse.json();
                 setAreas(areasData.areas || []);
-
+    
                 // Automatically select the first area if available
                 if (areasData.areas && areasData.areas.length > 0) {
                   setArea(areasData.areas[0]);
@@ -70,7 +70,8 @@ function ControlPanel() {
         }
       }
     };
-
+    
+    
     fetchSitesAndAreas();
 
     return () => {
