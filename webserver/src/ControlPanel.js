@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
+import './ControlPanel.css';
+
 
 function ControlPanel() {
   const [site, setSite] = useState(null);  // Current selected site
@@ -11,6 +13,10 @@ function ControlPanel() {
   const [newAreaName, setNewAreaName] = useState('');
   const [newDeviceName, setNewDeviceName] = useState('');
   const [message, setMessage] = useState('');
+  const [selectedDevice, setSelectedDevice] = useState(null); // Selected device for control
+  const [nowPlaying, setNowPlaying] = useState(null); // Mockup Now Playing data
+  const [upNext, setUpNext] = useState(null); // Mockup Up Next data
+
   const history = useHistory();
 
   // Fetch sites and set default site and area on component mount
@@ -265,8 +271,6 @@ const handleRenameArea = async () => {
   }
 };
 
- 
-  
   // Add a new device
   const handleAddDevice = async () => {
     if (!area) {
@@ -299,21 +303,35 @@ const handleRenameArea = async () => {
     }
   };
 
-  return (
-    <div>
-      <h1>Manager's Control Panel</h1>
+  const handleDeviceSelection = (deviceId) => {
+    const selected = devices.find(device => device.id === deviceId);
+    setSelectedDevice(selected);
 
-      <h3>Selected Site</h3>
-      <select
-        value={site?.id || ''}
-        onChange={(e) => handleSiteChange(parseInt(e.target.value))}
-      >
+    // For now, mock the Now Playing and Up Next data
+    setNowPlaying({
+      title: 'Current Track - Chill Mix',
+      link: 'https://www.youtube.com/watch?v=5qap5aO4i9A' // Placeholder YouTube link for live mix
+    });
+    setUpNext({
+      title: 'Next Track - Morning Vibes',
+      link: 'https://www.youtube.com/watch?v=L_jWHffIx5E' // Another placeholder link
+    });
+  };
+
+  return (
+
+<div className="control-panel">
+  <h1>Manager's Control Panel</h1>
+
+  <div className="selectors">
+    <h3>Selected Site</h3>
+    <div className="device-selection">
+      <select value={site?.id || ''} onChange={(e) => handleSiteChange(parseInt(e.target.value))}>
         <option value="" disabled>Select a site</option>
         {sites.map((site) => (
           <option key={site.id} value={site.id}>{site.name}</option>
         ))}
       </select>
-
       <input
         type="text"
         value={newSiteName}
@@ -322,19 +340,17 @@ const handleRenameArea = async () => {
       />
       <button onClick={handleAddSite}>Add Site</button>
       <button onClick={handleRenameSite}>Rename Site</button>
+    </div>
 
-
-      <h3>Selected Area</h3>
-      <select
-        value={area?.id || ''}
-        onChange={(e) => {
-          const selectedArea = areas.find(a => a.id === parseInt(e.target.value));
-          setArea(selectedArea);
-          if (selectedArea) {
-            fetchDevices(selectedArea.id);
-          }
-        }}
-      >
+    <h3>Selected Area</h3>
+    <div className="device-selection">
+      <select value={area?.id || ''} onChange={(e) => {
+        const selectedArea = areas.find(a => a.id === parseInt(e.target.value));
+        setArea(selectedArea);
+        if (selectedArea) {
+          fetchDevices(selectedArea.id);
+        }
+      }}>
         <option value="" disabled>Select an area</option>
         {areas.map((area) => (
           <option key={area.id} value={area.id}>{area.name}</option>
@@ -348,18 +364,16 @@ const handleRenameArea = async () => {
       />
       <button onClick={handleAddArea}>Add Area</button>
       <button onClick={handleRenameArea}>Rename Area</button>
+    </div>
 
-
-      <h3>Devices in Selected Area</h3>
-      {devices.length > 0 ? (
-        <ul>
-          {devices.map((device) => (
-            <li key={device.id}>{device.name}</li>
-          ))}
-        </ul>
-      ) : (
-        <p>No devices available. Add a device below.</p>
-      )}
+    <h3>Devices in Selected Area</h3>
+    <div className="device-selection">
+      <select value={selectedDevice?.id || ''} onChange={(e) => handleDeviceSelection(parseInt(e.target.value))}>
+        <option value="" disabled>Select a device</option>
+        {devices.map((device) => (
+          <option key={device.id} value={device.id}>{device.name}</option>
+        ))}
+      </select>
       <input
         type="text"
         value={newDeviceName}
@@ -367,9 +381,42 @@ const handleRenameArea = async () => {
         placeholder="New Device Name"
       />
       <button onClick={handleAddDevice}>Add Device</button>
-
-      {message && <p>{message}</p>}
     </div>
+  </div>
+
+  {selectedDevice && (
+    <div className="media-control">
+      <h3>Now Playing on {selectedDevice.name}</h3>
+      {nowPlaying ? (
+        <div className="now-playing">
+          <a href={nowPlaying.link} target="_blank" rel="noopener noreferrer">{nowPlaying.title}</a>
+        </div>
+      ) : (
+        <p>No media currently playing</p>
+      )}
+
+      <h4>Up Next</h4>
+      {upNext ? (
+        <div className="up-next">
+          <a href={upNext.link} target="_blank" rel="noopener noreferrer">{upNext.title}</a>
+        </div>
+      ) : (
+        <p>No media in the queue</p>
+      )}
+
+      {/* Mockup Drag-and-Drop Playlist */}
+      <div className="playlist-drag-drop">
+        <h4>Drag Media to Playlist</h4>
+        <div className="playlist">
+          <p>Drag YouTube links here...</p>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {message && <p className="message">{message}</p>}
+</div>
+
   );
 }
 
