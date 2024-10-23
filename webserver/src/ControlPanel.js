@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import './ControlPanel.css';
-
+import DJManager from './DJManager';
 
 function ControlPanel() {
   const [site, setSite] = useState(null);  // Current selected site

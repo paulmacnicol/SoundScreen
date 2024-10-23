@@ -36,6 +36,8 @@ services:
   control:
     build: ./control
     container_name: soundscreen_control
+    env_file:
+      - .env
     ports:
       - "4000:4000"
     networks:

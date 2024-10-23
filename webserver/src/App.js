@@ -5,6 +5,8 @@ import Login from './Login';
 import ControlPanel from './ControlPanel';
 import Home from './Home';
 import SubscriptionPage from './SubscriptionPage'; // Import the subscription page
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 
 // Helper function to check if the user is authenticated
 const isAuthenticated = () => {
