@@ -1,16 +1,44 @@
+// index.js
+
+// Load environment variables from .env file
 require('dotenv').config();
 
+// Import necessary modules
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 const mysql = require('mysql2');
+const WebSocket = require('ws');
+const path = require('path');
 
+// Initialize Express app
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Set the port for the server
 const port = 5000;
+
+// Create a WebSocket server instance, not attached to any server yet
+const wss = new WebSocket.Server({ noServer: true });
+
+// In-memory storage for devices
+const devices = {};     // Stores devices by code
+const devicesById = {}; // Stores devices by deviceId
+
+// Start the HTTP server and capture the server instance
+const server = app.listen(port, () => {
+  console.log(`Backend running on port ${port}`);
+});
+
+// Handle WebSocket upgrades
+server.on('upgrade', (request, socket, head) => {
+  // Implement authentication if needed
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit('connection', ws, request);
+  });
+});
 
 // MySQL database connection
 const db = mysql.createPool({
@@ -34,6 +62,114 @@ const authenticateJWT = (req, res, next) => {
     next();
   });
 };
+
+// Generate unique 6-digit code for onboarding devices
+function generateUniqueCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Handle WebSocket connections
+wss.on('connection', (ws) => {
+  let code = generateUniqueCode();
+  const expirationTime = 2 * 60 * 1000; // 2 minutes
+  let expiration = Date.now() + expirationTime;
+
+  // Store the device with its code and expiration time
+  devices[code] = { ws, expiration };
+
+  // Send the initial code to the device
+  ws.send(JSON.stringify({ action: 'displayCode', code }));
+
+  // Refresh the code every 2 minutes
+  const intervalId = setInterval(() => {
+    const newCode = generateUniqueCode();
+    expiration = Date.now() + expirationTime;
+    devices[newCode] = devices[code];
+    delete devices[code];
+    code = newCode;
+    devices[code].expiration = expiration;
+    ws.send(JSON.stringify({ action: 'displayCode', code: newCode }));
+  }, expirationTime);
+
+  // Handle WebSocket close event
+  ws.on('close', () => {
+    clearInterval(intervalId);
+    delete devices[code];
+  });
+});
+
+// Endpoint to verify device registration
+app.post('/api/verify-device', (req, res) => {
+  const { code, areaId } = req.body;
+  const device = devices[code];
+
+  if (device && device.expiration > Date.now()) {
+    // Update device status in the database
+    saveDeviceInfo(code, device, areaId);
+
+    // Mark the device as authenticated
+    devices[code].authenticated = true;
+
+    // Notify the device that it has been authenticated
+    device.ws.send(JSON.stringify({ action: 'authenticated' }));
+
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ success: false, message: 'Invalid or expired code' });
+  }
+});
+
+// Function to save device information into MariaDB
+function saveDeviceInfo(code, device, areaId) {
+  // Placeholder values for device name and type
+  const deviceName = 'New Device'; // You may want to get this from the request or user input
+  const deviceType = 'Unknown';    // Or detect from the device
+
+  const insertDeviceQuery = 'INSERT INTO devices (area_id, name, type, code) VALUES (?, ?, ?, ?)';
+  db.execute(insertDeviceQuery, [areaId, deviceName, deviceType, code], (err, results) => {
+    if (err) {
+      console.error('Error saving device info:', err);
+      // Handle error appropriately
+    } else {
+      const deviceId = results.insertId;
+      device.deviceId = deviceId;
+
+      // Map deviceId to the device object for future reference
+      devicesById[deviceId] = device;
+
+      console.log('Device registered with ID:', deviceId);
+    }
+  });
+}
+
+// Function to retrieve device by ID from in-memory storage
+function getDeviceById(deviceId) {
+  return devicesById[deviceId];
+}
+
+// Endpoint to handle commands from the control panel
+app.post('/api/send-command', (req, res) => {
+  const { deviceId, command } = req.body;
+  const device = getDeviceById(deviceId); // Retrieve device info from in-memory storage
+
+  if (device && device.ws && device.authenticated) {
+    device.ws.send(JSON.stringify({ action: command }));
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ success: false, message: 'Device not connected or not authenticated' });
+  }
+});
+
+// Serve the register.html page for device onboarding
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+// Serve the device.html page for authenticated devices
+app.get('/device', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'device.html'));
+});
+
 
 // Signup endpoint
 app.post('/api/signup', async (req, res) => {
@@ -261,8 +397,13 @@ app.post('/api/devices', authenticateJWT, (req, res) => {
   });
 });
 
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Backend running on port ${port}`);
+//Setup the /register endpoint
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
+
+//Add the route to serve device.html
+app.get('/device', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'device.html'));
+});
+

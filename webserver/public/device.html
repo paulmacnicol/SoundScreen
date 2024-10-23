@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Device Control</title>
+</head>
+<body>
+  <h1>Device Control</h1>
+  <p id="status">Waiting for commands...</p>
+  <script>
+    let ws;
+
+    function connectWebSocket() {
+      ws = new WebSocket('wss://soundscreen.soundcheckvn.com/device'); // Replace with your server URL
+
+      ws.onopen = () => {
+        console.log('WebSocket connection established');
+      };
+
+      ws.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+
+        if (data.action === 'playVideo') {
+          // Open YouTube video in fullscreen
+          window.location.href = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWebSocket, 1000); // Reconnect after 1 second
+      };
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>

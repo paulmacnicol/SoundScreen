@@ -1,3 +1,1735 @@
-Project Documentation - Wed Oct 16 18:34:33 UTC 2024
+Project Documentation - Wed Oct 23 20:02:56 UTC 2024
 ==============================
+
+File: /home/paul/SoundScreen/control/Dockerfile
+Type: Dockerfile
+------------------------------
+FROM node:16
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+EXPOSE 4000
+CMD [ "npm", "start" ]
+
+
+File: /home/paul/SoundScreen/control/package.json
+Type: JSON (Config/Package)
+------------------------------
+{
+  "name": "soundscreen-web",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-router-dom": "^5.2.0",
+    "react-scripts": "^4.0.3"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  }
+}
+
+
+File: /home/paul/SoundScreen/control/src/App.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+
+function App() {
+  return (
+    <div>
+      <h1>Manager's Control Panel</h1>
+      <button>Add Device</button>
+    </div>
+  );
+}
+
+export default App;
+
+
+File: /home/paul/SoundScreen/control/src/index.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+
+ReactDOM.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+  document.getElementById('root')
+);
+
+
+File: /home/paul/SoundScreen/webserver/Dockerfile
+Type: Dockerfile
+------------------------------
+FROM node:16
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+CMD [ "npm", "start" ]
+
+
+File: /home/paul/SoundScreen/webserver/package.json
+Type: JSON (Config/Package)
+------------------------------
+{
+  "name": "soundscreen-web",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-router-dom": "^5.2.0",
+    "react-scripts": "^4.0.3",
+    "axios": "^0.21.1",
+    "react-dnd": "^14.0.5",
+    "react-dnd-html5-backend": "^14.0.5"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  }
+}
+
+
+File: /home/paul/SoundScreen/webserver/src/Settings.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React, { useState } from 'react';
+
+function Settings({ siteId }) {
+  const [jsonData, setJsonData] = useState(null);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target.result;
+      try {
+        const json = JSON.parse(content);
+        setJsonData(json);
+      } catch (error) {
+        alert('Invalid JSON file');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSubmit = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/sites/${siteId}/settings`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(jsonData),
+    });
+
+    if (response.ok) {
+      alert('Settings updated successfully');
+    } else {
+      alert('Failed to update settings');
+    }
+  };
+
+  return (
+    <div>
+      <h1>Site Settings</h1>
+      <input type="file" accept="application/json" onChange={handleFileUpload} />
+      <button onClick={handleSubmit}>Upload JSON</button>
+      <button onClick={() => setJsonData(null)}>Cancel</button>
+    </div>
+  );
+}
+
+export default Settings;
+
+
+File: /home/paul/SoundScreen/webserver/src/ControlPanel.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React, { useState, useEffect } from 'react';
+import { useHistory } from 'react-router-dom';
+import './ControlPanel.css';
+import DJManager from './DJManager';
+
+function ControlPanel() {
+  const [site, setSite] = useState(null);  // Current selected site
+  const [sites, setSites] = useState([]);  // All sites for the user
+  const [area, setArea] = useState(null);  // Current selected area
+  const [areas, setAreas] = useState([]);  // All areas for the current site
+  const [devices, setDevices] = useState([]);  // Devices in the selected area
+  const [newSiteName, setNewSiteName] = useState('');
+  const [newAreaName, setNewAreaName] = useState('');
+  const [newDeviceName, setNewDeviceName] = useState('');
+  const [message, setMessage] = useState('');
+  const [selectedDevice, setSelectedDevice] = useState(null); // Selected device for control
+  const [nowPlaying, setNowPlaying] = useState(null); // Mockup Now Playing data
+  const [upNext, setUpNext] = useState(null); // Mockup Up Next data
+
+  const history = useHistory();
+
+  // Fetch sites and set default site and area on component mount
+  useEffect(() => {
+    let isMounted = true;  // Flag to check if the component is still mounted
+
+    const fetchSitesAndAreas = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const response = await fetch('/api/sites', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+    
+        if (response.ok) {
+          const data = await response.json();
+    
+          if (isMounted) {
+            // This line handles both single and multiple site cases
+            const fetchedSites = Array.isArray(data.sites) ? data.sites : [data.site];
+            setSites(fetchedSites);
+    
+            // Automatically select the first site if available
+            if (fetchedSites.length > 0) {
+              const firstSite = fetchedSites[0];
+              setSite(firstSite);
+    
+              // Fetch areas for the first site
+              const areasResponse = await fetch(`/api/sites/${firstSite.id}/areas`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+    
+              if (areasResponse.ok) {
+                const areasData = await areasResponse.json();
+                setAreas(areasData.areas || []);
+    
+                // Automatically select the first area if available
+                if (areasData.areas && areasData.areas.length > 0) {
+                  setArea(areasData.areas[0]);
+                  fetchDevices(areasData.areas[0].id);
+                }
+              }
+            } else {
+              setMessage('No sites found.');
+            }
+          }
+        } else {
+          setMessage('Failed to load sites.');
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('Error fetching sites:', error);
+          setMessage('An error occurred while fetching sites.');
+        }
+      }
+    };
+    
+    
+    fetchSitesAndAreas();
+
+    return () => {
+      isMounted = false;  // Cleanup function to avoid memory leaks
+    };
+  }, []);
+
+  const fetchDevices = async (areaId) => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`/api/areas/${areaId}/devices`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+  
+      if (response.ok) {
+        const data = await response.json();
+        // Handle case when there are no devices for the selected area
+        setDevices(data.devices || []);
+        if (data.devices.length === 0) {
+          setMessage('No devices available for this area.');
+        }
+      } else {
+        setMessage('Failed to load devices.');
+      }
+    } catch (error) {
+      setMessage('An error occurred while fetching devices.');
+    }
+  };
+  
+  // Add a new site
+  const handleAddSite = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch('/api/sites', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newSiteName || 'New Site' }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const newSite = { id: data.siteId, name: newSiteName || 'New Site' };
+        setSites([...sites, newSite]);
+        setNewSiteName('');
+        setMessage('Site added successfully!');
+      } else {
+        setMessage('Failed to add site.');
+      }
+    } catch (error) {
+      setMessage('An error occurred while adding a site.');
+    }
+  };
+
+// Add a new area and automatically select it
+const handleAddArea = async () => {
+  const token = localStorage.getItem('token');
+  if (!site) {
+    setMessage('Please select a site before adding an area.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/areas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ siteId: site.id, name: newAreaName }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const newArea = { id: data.areaId, name: newAreaName || `Area ${data.areaId}` };
+      setAreas([...areas, newArea]);
+      setNewAreaName('');
+
+      // Automatically select the new area
+      setArea(newArea);
+      fetchDevices(newArea.id);
+    } else {
+      setMessage('Failed to add area.');
+    }
+  } catch (error) {
+    setMessage('An error occurred while adding an area.');
+  }
+};
+
+// When a site is selected, automatically select the first area
+const handleSiteChange = async (siteId) => {
+  const updatedSite = sites.find(s => s.id === siteId);
+  setSite(updatedSite);
+
+  if (updatedSite) {
+    setAreas([]); // Clear previous areas
+    setArea(null); // Clear area selection
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`/api/sites/${siteId}/areas`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAreas(data.areas || []);
+
+        // Automatically select the first area if available
+        if (data.areas && data.areas.length > 0) {
+          const firstArea = data.areas[0];
+          setArea(firstArea);
+          fetchDevices(firstArea.id);  // Automatically fetch devices for the first area
+        }
+      } else {
+        setMessage('Failed to fetch areas.');
+      }
+    } catch (error) {
+      console.error('Error fetching areas:', error);
+    }
+  } else {
+    setAreas([]);
+    setDevices([]);
+  }
+};
+
+// Rename the selected site
+const handleRenameSite = async () => {
+  if (!site) {
+    setMessage('Please select a site to rename.');
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  try {
+    const response = await fetch(`/api/sites/${site.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: newSiteName }),
+    });
+
+    if (response.ok) {
+      const updatedSites = sites.map(s => s.id === site.id ? { ...s, name: newSiteName } : s);
+      setSites(updatedSites);
+      setNewSiteName('');
+      setMessage('Site renamed successfully!');
+    } else {
+      setMessage('Failed to rename site.');
+    }
+  } catch (error) {
+    setMessage('An error occurred while renaming the site.');
+  }
+};
+
+// Rename the selected area
+const handleRenameArea = async () => {
+  if (!area) {
+    setMessage('Please select an area to rename.');
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  try {
+    const response = await fetch(`/api/areas/${area.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: newAreaName }),
+    });
+
+    if (response.ok) {
+      const updatedAreas = areas.map(a => a.id === area.id ? { ...a, name: newAreaName } : a);
+      setAreas(updatedAreas);
+      setNewAreaName('');
+      setMessage('Area renamed successfully!');
+    } else {
+      setMessage('Failed to rename area.');
+    }
+  } catch (error) {
+    setMessage('An error occurred while renaming the area.');
+  }
+};
+
+  // Add a new device
+  const handleAddDevice = async () => {
+    if (!area) {
+      setMessage('Please select an area before adding a device.');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch('/api/devices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ areaId: area.id, name: newDeviceName || 'New Device' }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const newDevice = { id: data.deviceId, name: newDeviceName || 'New Device' };
+        setDevices([...devices, newDevice]);
+        setNewDeviceName('');
+        setMessage('Device added successfully!');
+      } else {
+        setMessage('Failed to add device.');
+      }
+    } catch (error) {
+      setMessage('An error occurred while adding a device.');
+    }
+  };
+
+  const handleDeviceSelection = (deviceId) => {
+    const selected = devices.find(device => device.id === deviceId);
+    setSelectedDevice(selected);
+
+    // For now, mock the Now Playing and Up Next data
+    setNowPlaying({
+      title: 'Current Track - Chill Mix',
+      link: 'https://www.youtube.com/watch?v=5qap5aO4i9A' // Placeholder YouTube link for live mix
+    });
+    setUpNext({
+      title: 'Next Track - Morning Vibes',
+      link: 'https://www.youtube.com/watch?v=L_jWHffIx5E' // Another placeholder link
+    });
+  };
+
+  return (
+
+<div className="control-panel">
+  <h1>Manager's Control Panel</h1>
+
+  <div className="selectors">
+    <h3>Selected Site</h3>
+    <div className="device-selection">
+      <select value={site?.id || ''} onChange={(e) => handleSiteChange(parseInt(e.target.value))}>
+        <option value="" disabled>Select a site</option>
+        {sites.map((site) => (
+          <option key={site.id} value={site.id}>{site.name}</option>
+        ))}
+      </select>
+      <input
+        type="text"
+        value={newSiteName}
+        onChange={(e) => setNewSiteName(e.target.value)}
+        placeholder="New Site Name"
+      />
+      <button onClick={handleAddSite}>Add Site</button>
+      <button onClick={handleRenameSite}>Rename Site</button>
+    </div>
+
+    <h3>Selected Area</h3>
+    <div className="device-selection">
+      <select value={area?.id || ''} onChange={(e) => {
+        const selectedArea = areas.find(a => a.id === parseInt(e.target.value));
+        setArea(selectedArea);
+        if (selectedArea) {
+          fetchDevices(selectedArea.id);
+        }
+      }}>
+        <option value="" disabled>Select an area</option>
+        {areas.map((area) => (
+          <option key={area.id} value={area.id}>{area.name}</option>
+        ))}
+      </select>
+      <input
+        type="text"
+        value={newAreaName}
+        onChange={(e) => setNewAreaName(e.target.value)}
+        placeholder="New Area Name"
+      />
+      <button onClick={handleAddArea}>Add Area</button>
+      <button onClick={handleRenameArea}>Rename Area</button>
+    </div>
+
+    <h3>Devices in Selected Area</h3>
+    <div className="device-selection">
+      <select value={selectedDevice?.id || ''} onChange={(e) => handleDeviceSelection(parseInt(e.target.value))}>
+        <option value="" disabled>Select a device</option>
+        {devices.map((device) => (
+          <option key={device.id} value={device.id}>{device.name}</option>
+        ))}
+      </select>
+      <input
+        type="text"
+        value={newDeviceName}
+        onChange={(e) => setNewDeviceName(e.target.value)}
+        placeholder="New Device Name"
+      />
+      <button onClick={handleAddDevice}>Add Device</button>
+    </div>
+  </div>
+
+  {selectedDevice && (
+    <div className="media-control">
+      <h3>Now Playing on {selectedDevice.name}</h3>
+      {nowPlaying ? (
+        <div className="now-playing">
+          <a href={nowPlaying.link} target="_blank" rel="noopener noreferrer">{nowPlaying.title}</a>
+        </div>
+      ) : (
+        <p>No media currently playing</p>
+      )}
+
+      <h4>Up Next</h4>
+      {upNext ? (
+        <div className="up-next">
+          <a href={upNext.link} target="_blank" rel="noopener noreferrer">{upNext.title}</a>
+        </div>
+      ) : (
+        <p>No media in the queue</p>
+      )}
+
+      {/* Mockup Drag-and-Drop Playlist */}
+      <div className="playlist-drag-drop">
+        <h4>Drag Media to Playlist</h4>
+        <div className="playlist">
+          <p>Drag YouTube links here...</p>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {message && <p className="message">{message}</p>}
+</div>
+
+  );
+}
+
+export default ControlPanel;
+
+
+File: /home/paul/SoundScreen/webserver/src/SubscriptionPage.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+import { useHistory } from 'react-router-dom';
+
+function SubscriptionPage() {
+  const history = useHistory();
+
+  const handleSubscriptionSelect = (subscriptionType) => {
+    // Store the selected subscription in local storage or send it to the backend
+    localStorage.setItem('subscriptionType', subscriptionType);
+
+    // Redirect the user to the control panel after selecting subscription
+    history.push('/control-panel');
+  };
+
+  return (
+    <div>
+      <h1>Select Your Subscription Plan</h1>
+      <div>
+        <h3>Free Plan</h3>
+        <p>1 Site, 1 Area, 3 Devices</p>
+        <button onClick={() => handleSubscriptionSelect('Free')}>Choose Free</button>
+      </div>
+      <div>
+        <h3>Single Site Plan</h3>
+        <p>1 Site, Unlimited Areas, 10 Devices</p>
+        <button onClick={() => handleSubscriptionSelect('Single Site')}>Choose Single Site</button>
+      </div>
+      <div>
+        <h3>Multi Site Plan</h3>
+        <p>5 Sites, Unlimited Areas, 50 Devices</p>
+        <button onClick={() => handleSubscriptionSelect('Multi Site')}>Choose Multi Site</button>
+      </div>
+      <div>
+        <h3>Enterprise Plan</h3>
+        <p>Unlimited Sites, Areas, and Devices</p>
+        <button onClick={() => handleSubscriptionSelect('Enterprise')}>Choose Enterprise</button>
+      </div>
+    </div>
+  );
+}
+
+export default SubscriptionPage;
+
+
+File: /home/paul/SoundScreen/webserver/src/Home.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+function Home() {
+  return (
+    <div>
+      <h2>SoundScreen – The Ultimate Venue Entertainment & Advertising Solution</h2>
+      <p>
+        Transform Your Venue’s Atmosphere with Music, Advertising, and Entertainment – All in One System.
+        Enhance Your Venue with Personalized Background Music and Dynamic TV Displays.
+      </p>
+      <h3>Welcome to SoundScreen</h3>
+      <p>
+        SoundScreen is the all-in-one entertainment and advertising solution designed specifically for bars,
+        restaurants, cafes, and entertainment venues. Our platform simplifies managing your venue’s atmosphere,
+        ensuring a seamless experience for you and your guests.
+      </p>
+      <h3>Why SoundScreen?</h3>
+      <p>
+        SoundScreen brings together the power of customized background music and dynamic TV display advertising,
+        allowing you to:
+      </p>
+      <ul>
+        <li>Set the Mood with the Perfect Soundtrack</li>
+        <li>Engage Patrons with Tailored Promotions and Advertising</li>
+        <li>Host Interactive Events for Ultimate Entertainment</li>
+      </ul>
+      <p>
+        Our system gives you full control over your venue's sound and visuals from a single, easy-to-use interface.
+        Whether you're managing background music, displaying promotions, or running interactive events, SoundScreen
+        takes care of it all.
+      </p>
+      <h3>Key Features</h3>
+      <h4>1. Background Music System</h4>
+      <p>
+        Elevate your venue’s atmosphere with customizable background music that’s easy to manage.
+      </p>
+      <ul>
+        <li>Integrate with Spotify or YouTube</li>
+        <li>Zone Control for Different Areas</li>
+        <li>Seamless Automation</li>
+        <li>Guest Requests</li>
+      </ul>
+      <h4>2. TV Display Advertising System</h4>
+      <p>
+        Turn your venue’s TVs into revenue-generating tools and entertainment hubs.
+      </p>
+      <ul>
+        <li>Promote Your Venue</li>
+        <li>Dynamic Content</li>
+        <li>Partner Ads for Extra Revenue</li>
+        <li>Interactive Entertainment</li>
+      </ul>
+      <h4>3. Event Management and Scheduling</h4>
+      <p>
+        Planning events has never been easier with SoundScreen. Schedule and manage your events effortlessly, all while
+        keeping your venue's atmosphere aligned with your events.
+      </p>
+      <h3>How It Works</h3>
+      <ul>
+        <li>Sign Up and Onboard Your Venue</li>
+        <li>Connect Your Devices</li>
+        <li>Personalize Your Content</li>
+        <li>Sit Back and Relax</li>
+      </ul>
+      <h3>Testimonials from Venue Owners</h3>
+      <p>
+        "SoundScreen has completely changed the way we manage our bar's atmosphere. The music is always perfectly timed, 
+        the ads are personalized for our guests, and the interactive events keep people coming back." – Sarah T., Bar Manager
+      </p>
+      <h3>Ready to Enhance Your Venue?</h3>
+      <button>
+        <Link to="/signup">Sign Up Today!</Link>
+      </button>
+    </div>
+  );
+}
+
+export default Home;
+
+
+File: /home/paul/SoundScreen/webserver/src/Signup.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React, { useState } from 'react';
+import { useHistory } from 'react-router-dom';
+
+function Signup() {
+  const [organizationName, setOrganizationName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const history = useHistory();
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const response = await fetch('/api/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization_name: organizationName,
+          email: email,
+          password: password,
+        }),
+      });
+
+      if (response.ok) {
+        setMessage('Signup successful! Redirecting to login...');
+        history.push('/login');  // Redirect to login after successful signup
+      } else {
+        const data = await response.json();
+        setMessage(data.message || 'Signup failed');
+      }
+    } catch (error) {
+      setMessage('An error occurred during signup');
+    }
+  };
+
+  return (
+    <div>
+      <h1>Signup</h1>
+      <form onSubmit={handleSignup}>
+        <input
+          type="text"
+          value={organizationName}
+          onChange={(e) => setOrganizationName(e.target.value)}
+          placeholder="Organization Name"
+          required
+        />
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          required
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          required
+        />
+        <button type="submit">Signup</button>
+      </form>
+      {message && <p>{message}</p>}
+    </div>
+  );
+}
+
+export default Signup;
+
+
+File: /home/paul/SoundScreen/webserver/src/App.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Route, Switch, Link, Redirect } from 'react-router-dom';
+import Signup from './Signup';
+import Login from './Login';
+import ControlPanel from './ControlPanel';
+import Home from './Home';
+import SubscriptionPage from './SubscriptionPage'; // Import the subscription page
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
+// Helper function to check if the user is authenticated
+const isAuthenticated = () => {
+  return !!localStorage.getItem('token');
+};
+
+// Define the PrivateRoute component
+const PrivateRoute = ({ component: Component, isAuthenticated, ...rest }) => {
+  return (
+    <Route
+      {...rest}
+      render={(props) =>
+        isAuthenticated ? (
+          <Component {...props} />
+        ) : (
+          <Redirect to="/login" />
+        )
+      }
+    />
+  );
+};
+
+// Final single App function
+function App() {
+  const [auth, setAuth] = useState({
+    isAuthenticated: isAuthenticated(),
+    site: null,  // Store user's site
+    area: null,  // Store user's area
+  });
+
+  // This effect will check if a token is stored in localStorage when the app loads
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      setAuth({ ...auth, isAuthenticated: true });
+    }
+  }, []);
+
+  // Function to handle login (used in the Login component)
+  const handleLogin = (token, site, area) => {
+    localStorage.setItem('token', token);
+    setAuth({
+      isAuthenticated: true,
+      site: site,  // Store site information from login
+      area: area,  // Store area information from login
+    });
+  };
+
+  // Function to handle logout
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setAuth({
+      isAuthenticated: false,
+      site: null,
+      area: null,
+    });
+  };
+
+  return (
+    <Router>
+      <nav>
+        <ul>
+          {!auth.isAuthenticated ? (
+            <>
+              <li><Link to="/">Home</Link></li>
+              <li><Link to="/signup">Signup</Link></li>
+              <li><Link to="/login">Login</Link></li>
+            </>
+          ) : (
+            <>
+              <li><Link to="/control-panel">Control Panel</Link></li>
+              <li><Link to="/" onClick={handleLogout}>Sign Out</Link></li>
+            </>
+          )}
+        </ul>
+      </nav>
+
+      <Switch>
+        <Route path="/" exact component={Home} />
+        <Route path="/signup" component={Signup} />
+        {/* Pass the handleLogin function to the Login component */}
+        <Route path="/login" component={() => <Login onLogin={handleLogin} />} />
+        <PrivateRoute path="/control-panel" component={ControlPanel} isAuthenticated={auth.isAuthenticated} />
+      </Switch>
+    </Router>
+  );
+}
+
+export default App;
+
+
+File: /home/paul/SoundScreen/webserver/src/index.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+
+ReactDOM.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+  document.getElementById('root')
+);
+
+
+File: /home/paul/SoundScreen/webserver/src/Login.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React, { useState } from 'react';
+import { useHistory } from 'react-router-dom';
+
+function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const history = useHistory(); // Used for redirecting
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setMessage('Login successful!');
+        localStorage.setItem('token', data.token); // Store JWT in localStorage
+        localStorage.setItem('site', JSON.stringify(data.site)); // Store site in localStorage
+        localStorage.setItem('area', JSON.stringify(data.area)); // Store area in localStorage
+
+        // Instead of history.push, use window.location.href to ensure proper redirect
+        window.location.href = '/control-panel';
+      } else {
+        setMessage(data.message || 'Login failed.');
+      }
+    } catch (error) {
+      setMessage('An error occurred during login. Please try again later.');
+      console.error('Login error:', error);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Login</h2>
+      <form onSubmit={handleSubmit}>
+        <div>
+          <label>Email:</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label>Password:</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <button type="submit">Login</button>
+      </form>
+      {message && <p>{message}</p>}
+    </div>
+  );
+}
+
+export default Login;
+
+
+File: /home/paul/SoundScreen/webserver/src/DJManager.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React, { useState, useEffect } from 'react';
+import { useDrag, useDrop } from 'react-dnd'; // React Drag and Drop
+import axios from 'axios'; // To handle API calls
+
+// Drag and drop item type
+const ItemType = {
+  TRACK: 'track'
+};
+
+// YouTube search function
+function DJManager({ selectedDevice }) {
+  const [nowPlaying, setNowPlaying] = useState(null); // Currently playing track
+  const [upNext, setUpNext] = useState(null); // Up Next track
+  const [playlist, setPlaylist] = useState([]); // Playlist queue
+  const [searchResults, setSearchResults] = useState([]); // YouTube search results
+  const [searchQuery, setSearchQuery] = useState(''); // Search input state
+  const [crossfaderPosition, setCrossfaderPosition] = useState(0); // Crossfader state
+
+  // Load YouTube API key from environment
+  const YOUTUBE_API_KEY = process.env.REACT_APP_YOUTUBE_API_KEY;
+
+  // Function to handle YouTube search
+  const searchYouTube = async () => {
+    if (!searchQuery) return; // Skip if no query
+    try {
+      const response = await axios.get(`https://www.googleapis.com/youtube/v3/search`, {
+        params: {
+          part: 'snippet',
+          q: searchQuery,
+          type: 'video',
+          key: YOUTUBE_API_KEY,
+          maxResults: 10
+        }
+      });
+
+      const results = response.data.items.map(item => ({
+        id: item.id.videoId,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails.default.url
+      }));
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Error fetching YouTube results:', error);
+    }
+  };
+
+  // Handle drag of a track
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: ItemType.TRACK,
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging()
+    })
+  }));
+
+  // Handle drop into playlist
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: ItemType.TRACK,
+    drop: (item) => addTrackToPlaylist(item),
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver()
+    })
+  }));
+
+  const addTrackToPlaylist = (track) => {
+    setPlaylist([...playlist, track]);
+  };
+
+  const playNextTrack = () => {
+    const crossfadeToNextTrack = () => {
+      setCrossfaderPosition(100); // Automatically move the crossfader to full
+      setNowPlaying(upNext); // Up Next becomes Now Playing
+      const nextInQueue = playlist.length > 0 ? playlist.shift() : null;
+      setUpNext(nextInQueue); // Load the next song from playlist
+      setPlaylist([...playlist]); // Update playlist queue
+    };
+
+    if (crossfaderPosition >= 100) {
+      crossfadeToNextTrack();
+    }
+  };
+
+  // React to changes in the selected device
+  useEffect(() => {
+    if (selectedDevice) {
+      console.log(`DJ Manager controlling device: ${selectedDevice.name}`);
+    }
+  }, [selectedDevice]);
+
+  return (
+    <div>
+      <h2>DJ Manager for {selectedDevice ? selectedDevice.name : 'No device selected'}</h2>
+      
+      {/* YouTube Search Input */}
+      <div>
+        <h3>YouTube Search</h3>
+        <input 
+          type="text" 
+          value={searchQuery} 
+          onChange={(e) => setSearchQuery(e.target.value)} 
+          placeholder="Search YouTube" 
+        />
+        <button onClick={searchYouTube}>Search</button>
+      </div>
+
+      {/* YouTube Search Results */}
+      <div>
+        <h4>Search Results</h4>
+        <ul>
+          {searchResults.map((result, index) => (
+            <li 
+              key={index} 
+              ref={drag} 
+              style={{ opacity: isDragging ? 0.5 : 1 }}
+            >
+              <img src={result.thumbnail} alt={result.title} width="50" />
+              <span>{result.title}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Display now playing and up next */}
+      <div>
+        <h3>Now Playing</h3>
+        <p>{nowPlaying ? nowPlaying.title : 'No track playing'}</p>
+        <h3>Up Next</h3>
+        <p>{upNext ? upNext.title : 'No track loaded'}</p>
+        <button onClick={playNextTrack}>Play Next</button>
+      </div>
+
+      {/* Playlist management with drag and drop */}
+      <div ref={drop} style={{ backgroundColor: isOver ? '#f0f0f0' : '#fff', padding: '10px', marginTop: '20px' }}>
+        <h3>Playlist</h3>
+        <ul>
+          {playlist.map((track, index) => (
+            <li key={index}>
+              <span>{track.title}</span>
+            </li>
+          ))}
+        </ul>
+        <p>Drag YouTube results here to add them to the playlist...</p>
+      </div>
+
+      {/* Crossfader */}
+      <div>
+        <h3>Crossfader</h3>
+        <input 
+          type="range" 
+          min="0" 
+          max="100" 
+          value={crossfaderPosition} 
+          onChange={(e) => setCrossfaderPosition(e.target.value)} 
+        />
+      </div>
+    </div>
+  );
+}
+
+export default DJManager;
+
+
+File: /home/paul/SoundScreen/webserver/src/Features.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+import './Features.css';
+
+function Features() {
+  return (
+    <div className="features-container">
+      <header className="features-header">
+        <h1>Features That Drive Success</h1>
+        <p>Explore SoundScreen's powerful set of tools designed to enhance your venue’s atmosphere and maximize engagement.</p>
+      </header>
+
+      <section className="feature-section">
+        <h2>Background Music Control</h2>
+        <p>Curate the perfect atmosphere for your venue with fully customizable music playlists.</p>
+        <ul>
+          <li>Integrate with Spotify, YouTube, or other streaming platforms</li>
+          <li>Manage music across multiple zones within your venue</li>
+          <li>Allow guest requests for an interactive experience</li>
+        </ul>
+      </section>
+
+      <section className="feature-section">
+        <h2>Dynamic TV Advertising</h2>
+        <p>Turn your venue’s TVs into dynamic revenue-generating tools.</p>
+        <ul>
+          <li>Display custom promotions and events</li>
+          <li>Sell ad space to partners for additional income</li>
+          <li>Show engaging entertainment or live sports</li>
+        </ul>
+      </section>
+
+      <section className="feature-section">
+        <h2>Event Management</h2>
+        <p>Host interactive events like quizzes, karaoke, and live streams to keep your guests entertained.</p>
+        <ul>
+          <li>Easy scheduling and management of recurring events</li>
+          <li>Automated syncing of music and display content with events</li>
+          <li>Guest participation features to increase engagement</li>
+        </ul>
+      </section>
+
+      <footer className="footer">
+        <p>Experience these features and more with SoundScreen.</p>
+        <Link to="/signup">
+          <button className="cta-button">Get Started</button>
+        </Link>
+      </footer>
+    </div>
+  );
+}
+
+export default Features;
+
+
+File: /home/paul/SoundScreen/webserver/src/AccountUpgradeRequired.js
+Type: JavaScript (Node/Express)
+------------------------------
+// src/AccountUpgradeRequired.js
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+function AccountUpgradeRequired() {
+  return (
+    <div>
+      <h1>Upgrade Required</h1>
+      <p>Upgrade your package to access these features.</p>
+      <Link to="/subscription">Go to Subscription Page</Link>
+    </div>
+  );
+}
+
+export default AccountUpgradeRequired;
+
+
+File: /home/paul/SoundScreen/webserver/src/Pricing.js
+Type: JavaScript (Node/Express)
+------------------------------
+import React from 'react';
+import './Pricing.css';
+
+function Pricing() {
+  return (
+    <div className="pricing-container">
+      <header className="pricing-header">
+        <h1>Flexible Pricing for Any Venue</h1>
+        <p>No matter the size of your venue, SoundScreen has a plan that fits your needs.</p>
+      </header>
+
+      <section className="pricing-table">
+        <div className="pricing-tier">
+          <h2>Free Plan</h2>
+          <p>Perfect for small venues looking to try SoundScreen.</p>
+          <ul>
+            <li>1 Site</li>
+            <li>1 Area</li>
+            <li>Up to 3 Devices</li>
+            <li>Basic Support</li>
+          </ul>
+          <p className="price">$0 / month</p>
+          <Link to="/signup">
+            <button className="pricing-button">Choose Free</button>
+          </Link>
+        </div>
+
+        <div className="pricing-tier">
+          <h2>Single Site Plan</h2>
+          <p>For medium-sized venues needing more control.</p>
+          <ul>
+            <li>1 Site</li>
+            <li>Unlimited Areas</li>
+            <li>Up to 10 Devices</li>
+            <li>Priority Support</li>
+          </ul>
+          <p className="price">$49 / month</p>
+          <Link to="/signup">
+            <button className="pricing-button">Choose Single Site</button>
+          </Link>
+        </div>
+
+        <div className="pricing-tier">
+          <h2>Multi-Site Plan</h2>
+          <p>Ideal for venue chains or businesses with multiple locations.</p>
+          <ul>
+            <li>Up to 5 Sites</li>
+            <li>Unlimited Areas</li>
+            <li>Up to 50 Devices</li>
+            <li>Premium Support</li>
+          </ul>
+          <p className="price">$199 / month</p>
+          <Link to="/signup">
+            <button className="pricing-button">Choose Multi-Site</button>
+          </Link>
+        </div>
+
+        <div className="pricing-tier">
+          <h2>Enterprise Plan</h2>
+          <p>Custom solutions for large venues and businesses.</p>
+          <ul>
+            <li>Unlimited Sites</li>
+            <li>Unlimited Areas</li>
+            <li>Unlimited Devices</li>
+            <li>Dedicated Support</li>
+          </ul>
+          <p className="price">Contact Us</p>
+          <Link to="/contact">
+            <button className="pricing-button">Contact Us</button>
+          </Link>
+        </div>
+      </section>
+
+      <footer className="footer">
+        <p>Find the right plan for your business and start using SoundScreen today.</p>
+        <Link to="/signup">
+          <button className="cta-button">Sign Up Now</button>
+        </Link>
+      </footer>
+    </div>
+  );
+}
+
+export default Pricing;
+
+
+File: /home/paul/SoundScreen/nginx/Dockerfile
+Type: Dockerfile
+------------------------------
+FROM nginx:latest
+
+# Copy nginx.conf from the host machine to the container's NGINX configuration directory
+COPY ./nginx.conf /etc/nginx/nginx.conf
+
+# Ensure SSL certificates are mounted via volumes as specified in docker-compose.yml
+
+
+
+File: /home/paul/SoundScreen/app/Dockerfile
+Type: Dockerfile
+------------------------------
+# Use an official Node.js image as the base
+FROM node:16
+
+# Set the working directory inside the container
+WORKDIR /usr/src/app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Install MariaDB client (MySQL-compatible)
+RUN apt-get update && apt-get install -y mariadb-client
+
+# Copy the rest of the app's code
+COPY . .
+
+# Expose the application's port
+EXPOSE 5000
+
+# Start the app
+CMD ["npm", "start"]
+
+
+File: /home/paul/SoundScreen/app/package.json
+Type: JSON (Config/Package)
+------------------------------
+{
+  "name": "soundscreen-backend",
+  "version": "1.0.0",
+  "description": "Backend for Soundscreen project",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^10.0.0",
+    "express": "^4.17.1",
+    "jsonwebtoken": "^8.5.1",
+    "mysql2": "^2.2.5"
+  }
+}
+
+
+File: /home/paul/SoundScreen/app/src/index.js
+Type: JavaScript (Node/Express)
+------------------------------
+require('dotenv').config();
+
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const cors = require('cors');
+const mysql = require('mysql2');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const port = 5000;
+
+// MySQL database connection
+const db = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME
+});
+
+// JWT secret
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+
+// Middleware to protect routes
+const authenticateJWT = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(403).json({ message: 'Unauthorized' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Unauthorized' });
+    req.user = user;
+    next();
+  });
+};
+
+// Signup endpoint
+app.post('/api/signup', async (req, res) => {
+  const { organization_name, email, password } = req.body;
+  if (!organization_name || !email || !password) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const query = 'INSERT INTO users (organization_name, email, password_hash, subscription_type) VALUES (?, ?, ?, ?)';
+    const [userResults] = await db.promise().execute(query, [organization_name, email, hashedPassword, 'free']);
+    const userId = userResults.insertId;
+
+    const insertSiteQuery = 'INSERT INTO sites (user_id, name) VALUES (?, ?)';
+    const [siteResults] = await db.promise().execute(insertSiteQuery, [userId, 'Main Site']);
+    const siteId = siteResults.insertId;
+
+    const insertAreaQuery = 'INSERT INTO areas (site_id, name) VALUES (?, ?)';
+    await db.promise().execute(insertAreaQuery, [siteId, 'Main Area']);
+
+    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
+    return res.status(201).json({ message: 'User created successfully, please login' });
+
+  } catch (error) {
+    console.error('Signup error:', error);
+    return res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// Login endpoint
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ message: 'All fields are required' });
+
+  try {
+    const [userResults] = await db.promise().execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (userResults.length === 0) return res.status(400).json({ message: 'Invalid credentials' });
+
+    const user = userResults[0];
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) return res.status(400).json({ message: 'Invalid credentials' });
+
+    // Fetch the user's main site and area
+    const [siteResults] = await db.promise().execute('SELECT * FROM sites WHERE user_id = ?', [user.id]);
+    const [areaResults] = await db.promise().execute('SELECT * FROM areas WHERE site_id = ?', [siteResults[0].id]);
+
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1h' });
+
+    // Return token and user's default site and area
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      site: siteResults[0],
+      area: areaResults[0],
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// Fetch all sites and areas for the authenticated user
+app.get('/api/sites', authenticateJWT, (req, res) => {
+  const userId = req.user.userId;
+
+  // Fetch all sites for the user
+  const siteQuery = 'SELECT * FROM sites WHERE user_id = ?';
+  db.execute(siteQuery, [userId], (err, sites) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    if (sites.length === 0) return res.status(404).json({ message: 'No sites found for user' });
+
+    // Get the list of site IDs
+    const siteIds = sites.map(site => site.id);
+
+    // Dynamically generate placeholders for the site IDs
+    const placeholders = siteIds.map(() => '?').join(',');
+
+    const areaQuery = `SELECT * FROM areas WHERE site_id IN (${placeholders})`;
+    
+    // Execute the query with the siteIds as individual arguments
+    db.execute(areaQuery, siteIds, (err, areas) => {
+      if (err) return res.status(500).json({ message: 'Database error', error: err });
+
+      // Attach areas to the correct sites
+      const sitesWithAreas = sites.map(site => ({
+        ...site,
+        areas: areas.filter(area => area.site_id === site.id)
+      }));
+
+      // Return all sites with their associated areas
+      res.status(200).json({ sites: sitesWithAreas });
+    });
+  });
+});
+
+
+
+// Fetch areas for a specific site
+app.get('/api/sites/:siteId/areas', authenticateJWT, (req, res) => {
+  const { siteId } = req.params;
+  
+  const query = 'SELECT * FROM areas WHERE site_id = ?';
+  db.execute(query, [siteId], (err, areas) => {
+    if (err) {
+      return res.status(500).json({ message: 'Database error', error: err });
+    }
+    
+    if (areas.length === 0) {
+      return res.status(404).json({ message: 'No areas found for this site' });
+    }
+    
+    return res.status(200).json({ areas });
+  });
+});
+
+// Add a new site and automatically create an "Area 1"
+app.post('/api/sites', authenticateJWT, async (req, res) => {
+  const userId = req.user.userId;
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ message: 'Site name is required' });
+  }
+
+  try {
+    // Insert new site
+    const insertSiteQuery = 'INSERT INTO sites (user_id, name) VALUES (?, ?)';
+    const [siteResults] = await db.promise().execute(insertSiteQuery, [userId, name]);
+    const siteId = siteResults.insertId;
+
+    // Automatically create "Area 1" for the new site
+    const insertAreaQuery = 'INSERT INTO areas (site_id, name) VALUES (?, ?)';
+    const [areaResults] = await db.promise().execute(insertAreaQuery, [siteId, 'Area 1']);
+    const areaId = areaResults.insertId;
+
+    return res.status(201).json({ message: 'Site and Area created successfully', siteId, areaId });
+  } catch (error) {
+    console.error('Error creating site and area:', error);
+    return res.status(500).json({ message: 'Error creating site and area', error });
+  }
+});
+
+
+// Add a new area
+app.post('/api/areas', authenticateJWT, (req, res) => {
+  const { siteId, name } = req.body;
+  const insertAreaQuery = 'INSERT INTO areas (site_id, name) VALUES (?, ?)';
+  db.execute(insertAreaQuery, [siteId, name], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Failed to add area', error: err });
+    res.status(201).json({ message: 'Area added successfully!', areaId: results.insertId });
+  });
+});
+// Rename an area
+app.put('/api/areas/:areaId', authenticateJWT, (req, res) => {
+  const { areaId } = req.params;
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ message: 'Area name is required' });
+  }
+
+  const query = 'UPDATE areas SET name = ? WHERE id = ?';
+  db.execute(query, [name, areaId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    if (results.affectedRows === 0) return res.status(404).json({ message: 'Area not found' });
+
+    res.status(200).json({ message: 'Area renamed successfully' });
+  });
+});
+
+// Rename a site
+app.put('/api/sites/:siteId', authenticateJWT, (req, res) => {
+  const { siteId } = req.params;
+  const { name } = req.body;
+  const query = 'UPDATE sites SET name = ? WHERE id = ?';
+  db.execute(query, [name, siteId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    res.status(200).json({ message: 'Site renamed successfully' });
+  });
+});
+
+// Delete an area
+app.delete('/api/areas/:areaId', authenticateJWT, (req, res) => {
+  const { areaId } = req.params;
+  const query = 'DELETE FROM areas WHERE id = ?';
+  db.execute(query, [areaId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    res.status(200).json({ message: 'Area deleted successfully' });
+  });
+});
+// Fetch devices for a specific area
+app.get('/api/areas/:areaId/devices', authenticateJWT, (req, res) => {
+  const { areaId } = req.params;
+  
+  const query = 'SELECT * FROM devices WHERE area_id = ?';
+  db.execute(query, [areaId], (err, devices) => {
+    if (err) {
+      return res.status(500).json({ message: 'Database error', error: err });
+    }
+
+    // Return an empty array if no devices found, instead of 404
+    return res.status(200).json({ devices: devices || [] });
+  });
+});
+
+
+
+// Add a new device to an area
+app.post('/api/devices', authenticateJWT, (req, res) => {
+  const { areaId, name } = req.body;
+
+  if (!areaId || !name) {
+    return res.status(400).json({ message: 'Area ID and device name are required' });
+  }
+
+  const insertDeviceQuery = 'INSERT INTO devices (area_id, name) VALUES (?, ?)';
+  db.execute(insertDeviceQuery, [areaId, name], (err, results) => {
+    if (err) {
+      return res.status(500).json({ message: 'Failed to add device', error: err });
+    }
+    
+    return res.status(201).json({ message: 'Device added successfully!', deviceId: results.insertId });
+  });
+});
+
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Backend running on port ${port}`);
+});
+
+
+File: /home/paul/SoundScreen/docker-compose.yml
+Type: Docker Compose YAML
+------------------------------
+version: '3.8'
+services:
+  db:
+    image: mariadb:latest
+    container_name: soundscreen_db
+    env_file:
+      - ./db/db.env
+    volumes:
+      - ./db/data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    networks:
+      - soundscreen-net
+
+  app:
+    build: ./app
+    container_name: soundscreen_app
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "5000:5000"
+    networks:
+      - soundscreen-net
+    depends_on:
+      - db
+
+  webserver:
+    build: ./webserver
+    container_name: soundscreen_web
+    ports:
+      - "3000:3000"
+    networks:
+      - soundscreen-net
+
+  control:
+    build: ./control
+    container_name: soundscreen_control
+    env_file:
+      - .env
+    ports:
+      - "4000:4000"
+    networks:
+      - soundscreen-net
+
+
+  nginx:
+    build: ./nginx
+    container_name: soundscreen_nginx
+    volumes:
+      - /etc/letsencrypt/live/soundscreen.soundcheckvn.com:/etc/letsencrypt/live/soundscreen.soundcheckvn.com:ro
+      - /etc/letsencrypt/archive/soundscreen.soundcheckvn.com:/etc/letsencrypt/archive/soundscreen.soundcheckvn.com:ro
+
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+      - webserver
+      - control
+    networks:
+      - soundscreen-net
+
+networks:
+  soundscreen-net:
+    name: soundscreen-net
+    driver: bridge
+
 

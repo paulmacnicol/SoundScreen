@@ -16,10 +16,13 @@ services:
   app:
     build: ./app
     container_name: soundscreen_app
+    volumes:
+      - ./webserver/public:/usr/src/app/src/public/
     environment:
       - NODE_ENV=production
     ports:
       - "5000:5000"
+      - "8080:8080"
     networks:
       - soundscreen-net
     depends_on:

@@ -16,7 +16,6 @@ function ControlPanel() {
   const [selectedDevice, setSelectedDevice] = useState(null); // Selected device for control
   const [nowPlaying, setNowPlaying] = useState(null); // Mockup Now Playing data
   const [upNext, setUpNext] = useState(null); // Mockup Up Next data
-
   const history = useHistory();
 
   // Fetch sites and set default site and area on component mount
@@ -318,6 +317,98 @@ const handleRenameArea = async () => {
     });
   };
 
+  function RegisterDevice({ areaId }) {
+    const [code, setCode] = useState('');
+  
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      // Send code and areaId to backend for verification
+      const response = await fetch('/api/verify-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, areaId }),
+      });
+      // Handle response
+      const result = await response.json();
+      if (result.success) {
+        alert('Device registered successfully!');
+        // Optionally update device list or state
+      } else {
+        alert(result.message || 'Failed to register device.');
+      }
+    };
+  
+    return (
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Enter 6-digit code"
+          required
+        />
+        <button type="submit">Register Device</button>
+      </form>
+    );
+  }
+
+  <RegisterDevice areaId={area?.id} />
+
+  
+  //Device List with Actions
+  function DeviceList({ areaId }) {
+    const [devices, setDevices] = useState([]);
+  
+    useEffect(() => {
+      let isMounted = true; // Track if the component is mounted
+    
+      if (areaId) {
+        // Fetch device list from backend
+        const token = localStorage.getItem('token');
+        fetch(`/api/areas/${areaId}/devices`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (isMounted) { // Only update state if component is mounted
+              setDevices(data.devices || []);
+            }
+          })
+          .catch((error) => {
+            if (isMounted) {
+              console.error('Error fetching devices:', error);
+            }
+          });
+      }
+    
+      return () => {
+        isMounted = false; // Cleanup function to prevent state updates
+      };
+    }, [areaId]);
+  
+    const handlePlayVideo = (deviceId) => {
+      // Send command to backend to play video on device
+      fetch('/api/send-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, command: 'playVideo' }),
+      });
+    };
+  
+    return (
+      <ul>
+        {devices.map((device) => (
+          <li key={device.id}>
+            {device.name} - {device.status || 'Unknown'}
+            <button onClick={() => handlePlayVideo(device.id)}>Play Video</button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  
+  
+
   return (
 
 <div className="control-panel">
@@ -413,7 +504,9 @@ const handleRenameArea = async () => {
       </div>
     </div>
   )}
-
+  <RegisterDevice areaId={area?.id} />
+  <DeviceList areaId={area?.id} />
+  
   {message && <p className="message">{message}</p>}
 </div>
 

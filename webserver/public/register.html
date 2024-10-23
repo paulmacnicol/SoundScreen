@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Device Registration</title>
+</head>
+<body>
+  <h1>Device Registration</h1>
+  <p>Please enter this code in the Control Panel:</p>
+  <h2 id="code-display">Loading code...</h2>
+  <script>
+    let ws;
+
+    function connectWebSocket() {
+      ws = new WebSocket('wss://soundscreen.soundcheckvn.com/register'); // Replace with your server URL
+
+      ws.onopen = () => {
+        console.log('WebSocket connection established');
+      };
+
+      ws.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+
+        if (data.action === 'displayCode') {
+          document.getElementById('code-display').innerText = data.code;
+        } else if (data.action === 'authenticated') {
+          // Redirect to authenticated device page
+          window.location.href = '/device';
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWebSocket, 1000); // Reconnect after 1 second
+      };
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>
