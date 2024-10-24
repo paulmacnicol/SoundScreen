@@ -11,14 +11,15 @@
     let deviceId = localStorage.getItem('deviceId');
   
     function connectWebSocket() {
-      ws = new WebSocket('wss://soundscreen.soundcheckvn.com/device'); // Use your actual domain
-  
+      ws = new WebSocket('wss://soundscreen.soundcheckvn.com/device'); // Ensure this matches your backend
+
       ws.onopen = () => {
         console.log('WebSocket connection established');
   
         if (deviceId) {
           // Reconnecting device
           ws.send(JSON.stringify({ action: 'reconnect', deviceId }));
+          console.log('Sent reconnect action with deviceId:', deviceId);
         } else {
           // Send device metadata
           const deviceInfo = {
@@ -31,33 +32,52 @@
             // Add more metadata if needed
           };
           ws.send(JSON.stringify(deviceInfo));
+          console.log('Sent deviceInfo:', deviceInfo);
         }
       };
   
       ws.onmessage = (message) => {
-        const data = JSON.parse(message.data);
+        try {
+          const data = JSON.parse(message.data);
+          console.log('Received message:', data);
   
-        if (data.action === 'authenticated') {
-          document.getElementById('status').innerText = 'Authenticated and ready!';
-        } else if (data.action === 'deviceRegistered') {
-          deviceId = data.deviceId;
-          localStorage.setItem('deviceId', deviceId);
-        } else if (data.action === 'playVideo') {
-          // Open YouTube video in fullscreen
-          window.location.href = data.videoUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
-        } else if (data.action === 'disconnect') {
-          localStorage.removeItem('deviceId');
-          window.location.href = '/register';
+          if (data.action === 'authenticated') {
+            document.getElementById('status').innerText = 'Authenticated and ready!';
+            console.log('Device authenticated');
+          } else if (data.action === 'deviceRegistered') {
+            deviceId = data.deviceId;
+            localStorage.setItem('deviceId', deviceId);
+            console.log('Device registered with deviceId:', deviceId);
+          } else if (data.action === 'playVideo') {
+            console.log('Received playVideo command with URL:', data.videoUrl);
+            // Open YouTube video in fullscreen
+            window.location.href = data.videoUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+          } else if (data.action === 'disconnect') {
+            localStorage.removeItem('deviceId');
+            window.location.href = '/register';
+            console.log('Received disconnect command');
+          } else if (data.action === 'displayCode') {
+            console.log('Received displayCode:', data.code);
+            document.getElementById('status').innerText = `Code: ${data.code}`;
+          } else {
+            console.warn('Unknown action received:', data.action);
+          }
+        } catch (error) {
+          console.error('Error parsing message:', message.data, error);
         }
       };
   
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        console.log(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}. Reconnecting in 1 second...`);
         setTimeout(connectWebSocket, 1000); // Reconnect after 1 second
+      };
+  
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
       };
     }
   
     connectWebSocket();
   </script>
-  
-  </body>
+</body>
 </html>

@@ -317,78 +317,116 @@ const handleRenameArea = async () => {
     });
   };
 
-  function RegisterDevice({ areaId, onDeviceRegistered }) {
-    const [code, setCode] = useState('');
-    const [deviceName, setDeviceName] = useState('');
-    const [isVerified, setIsVerified] = useState(false);
-  
-    const handleSubmitCode = async (e) => {
-      e.preventDefault();
+// Inside ControlPanel.js
+
+function RegisterDevice({ areaId, onDeviceRegistered }) {
+  const [code, setCode] = useState('');
+  const [deviceName, setDeviceName] = useState('');
+  const [isVerified, setIsVerified] = useState(false);
+
+  const handleSubmitCode = async (e) => {
+    e.preventDefault();
+    console.log(`Attempting to verify device with code: ${code} and areaId: ${areaId}`);
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No JWT token found. User might not be authenticated.');
+      alert('Authentication error: Please log in again.');
+      return;
+    }
+
+    try {
       const response = await fetch('/api/verify-device', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ code, areaId }),
       });
+
       const result = await response.json();
-      if (result.success) {
+      if (response.ok && result.success) {
+        console.log('Device verified successfully.');
         setIsVerified(true);
       } else {
+        console.error(`Device verification failed: ${result.message}`);
         alert(result.message || 'Failed to verify device.');
       }
-    };
-  
-    const handleSubmitName = async (e) => {
-      e.preventDefault();
-      const token = localStorage.getItem('token');
+    } catch (error) {
+      console.error('Error verifying device:', error);
+      alert('An error occurred while verifying the device.');
+    }
+  };
+
+  const handleSubmitName = async (e) => {
+    e.preventDefault();
+    console.log(`Attempting to update device name to: ${deviceName} for code: ${code} and areaId: ${areaId}`);
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No JWT token found. User might not be authenticated.');
+      alert('Authentication error: Please log in again.');
+      return;
+    }
+
+    try {
       const response = await fetch('/api/update-device-name', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({ code, deviceName, areaId: areaId }),
       });
+
       const result = await response.json();
-      if (result.success) {
+      if (response.ok && result.success) {
+        console.log('Device name updated successfully.');
         alert('Device registered successfully!');
         setCode('');
         setDeviceName('');
         setIsVerified(false);
         onDeviceRegistered(); // Refresh device list
       } else {
+        console.error(`Failed to update device name: ${result.message}`);
         alert(result.message || 'Failed to update device name.');
       }
-    };
-    
-  
-    if (!isVerified) {
-      return (
-        <form onSubmit={handleSubmitCode}>
-          <input
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Enter 6-digit code"
-            required
-          />
-          <button type="submit">Verify Device</button>
-        </form>
-      );
-    } else {
-      return (
-        <form onSubmit={handleSubmitName}>
-          <input
-            type="text"
-            value={deviceName}
-            onChange={(e) => setDeviceName(e.target.value)}
-            placeholder="Enter Device Name"
-            required
-          />
-          <button type="submit">Save Device Name</button>
-        </form>
-      );
+    } catch (error) {
+      console.error('Error updating device name:', error);
+      alert('An error occurred while updating the device name.');
     }
+  };
+
+  if (!isVerified) {
+    return (
+      <form onSubmit={handleSubmitCode}>
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Enter 6-digit code"
+          required
+        />
+        <button type="submit">Verify Device</button>
+      </form>
+    );
+  } else {
+    return (
+      <form onSubmit={handleSubmitName}>
+        <input
+          type="text"
+          value={deviceName}
+          onChange={(e) => setDeviceName(e.target.value)}
+          placeholder="Enter Device Name"
+          required
+        />
+        <button type="submit">Save Device Name</button>
+      </form>
+    );
   }
+}
+
   
 
 
@@ -473,62 +511,106 @@ const handleRenameArea = async () => {
   }
 
   // DeviceList Component with Actions
-  function DeviceList({ areaId }) {
-    const [devices, setDevices] = useState([]);
-  
-    useEffect(() => {
-      let isMounted = true;
-  
-      if (areaId) {
-        // Fetch device list from backend
-        const token = localStorage.getItem('token');
-        fetch(`/api/areas/${areaId}/devices`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            if (isMounted) {
-              setDevices(data.devices || []);
-            }
-          })
-          .catch((error) => {
-            if (isMounted) {
-              console.error('Error fetching devices:', error);
-            }
-          });
-      }
-  
-      return () => {
-        isMounted = false;
-      };
-    }, [areaId]);
-  
-    const handleForgetDevice = (deviceId) => {
+// Inside ControlPanel.js
+
+function DeviceList({ areaId }) {
+  const [devices, setDevices] = useState([]);
+  const [isSendingCommand, setIsSendingCommand] = useState(false); // New state for command sending status
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchDevicesData = async () => {
+      if (!areaId) return;
+
       const token = localStorage.getItem('token');
-      fetch('/api/forget-device', {
+      if (!token) {
+        console.error('No JWT token found. User might not be authenticated.');
+        setMessage('Authentication error: Please log in again.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/areas/${areaId}/devices`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted) {
+            setDevices(data.devices || []);
+          }
+        } else {
+          const errorData = await response.json();
+          console.error('Failed to fetch devices:', errorData.message);
+          if (isMounted) {
+            setMessage('Failed to load devices.');
+          }
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('Error fetching devices:', error);
+          setMessage('An error occurred while fetching devices.');
+        }
+      }
+    };
+
+    fetchDevicesData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [areaId]);
+
+  const handleForgetDevice = async (deviceId) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No JWT token found. User might not be authenticated.');
+      alert('Authentication error: Please log in again.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/forget-device', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({ deviceId }),
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.success) {
-            setDevices(devices.filter((device) => device.id !== deviceId));
-          } else {
-            alert(data.message || 'Failed to forget device.');
-          }
-        })
-        .catch((error) => {
-          console.error('Error forgetting device:', error);
-        });
-    };
-  
-    const handlePlayVideo = (deviceId) => {
-      const token = localStorage.getItem('token');
-      fetch('/api/send-command', {
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        console.log(`Device with ID ${deviceId} forgotten successfully.`);
+        setDevices(devices.filter((device) => device.id !== deviceId));
+        alert('Device forgotten successfully.');
+      } else {
+        console.error(`Failed to forget device: ${data.message}`);
+        alert(`Failed to forget device: ${data.message || 'Unknown error.'}`);
+      }
+    } catch (error) {
+      console.error('Error forgetting device:', error);
+      alert('An error occurred while forgetting the device.');
+    }
+  };
+
+  const handlePlayVideo = async (deviceId) => {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      console.error('No JWT token found. User might not be authenticated.');
+      alert('Authentication error: Please log in again.');
+      return;
+    }
+
+    setIsSendingCommand(true); // Start loading state
+
+    try {
+      console.log(`Sending 'playVideo' command to deviceId: ${deviceId}`);
+      
+      const response = await fetch('/api/send-command', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -536,20 +618,42 @@ const handleRenameArea = async () => {
         },
         body: JSON.stringify({ deviceId, command: 'playVideo' }),
       });
-    };
-  
-    return (
-      <ul>
-        {devices.map((device) => (
-          <li key={device.id}>
-            {device.name} - {device.status || 'Unknown'}
-            <button onClick={() => handlePlayVideo(device.id)}>Play Video</button>
-            <button onClick={() => handleForgetDevice(device.id)}>Forget Device</button>
-          </li>
-        ))}
-      </ul>
-    );
-  }
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        console.log(`'Play Video' command sent successfully to deviceId: ${deviceId}`);
+        alert('Play Video command sent successfully.');
+      } else {
+        console.error(`Failed to send 'Play Video' command: ${data.message}`);
+        alert(`Failed to send Play Video command: ${data.message || 'Unknown error.'}`);
+      }
+    } catch (error) {
+      console.error('Error sending Play Video command:', error);
+      alert('An error occurred while sending the Play Video command.');
+    } finally {
+      setIsSendingCommand(false); // End loading state
+    }
+  };
+
+  return (
+    <ul>
+      {devices.map((device) => (
+        <li key={device.id}>
+          {device.name} - {device.status || 'Unknown'}
+          <button 
+            onClick={() => handlePlayVideo(device.id)}
+            disabled={isSendingCommand} // Disable button while sending
+          >
+            {isSendingCommand ? 'Sending...' : 'Play Video'}
+          </button>
+          <button onClick={() => handleForgetDevice(device.id)}>Forget Device</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 
   return (
     <div className="control-panel">
