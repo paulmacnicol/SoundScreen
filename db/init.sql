@@ -34,9 +34,13 @@ CREATE TABLE IF NOT EXISTS devices (
     area_id INT NOT NULL,
     name VARCHAR(255) NOT NULL,
     type VARCHAR(255),
+    screen_width INT,
+    screen_height INT,
+    user_agent VARCHAR(255),
     code VARCHAR(255), 
     FOREIGN KEY (area_id) REFERENCES areas(id)
 );
+
 
 CREATE TABLE IF NOT EXISTS sites (
     id INT AUTO_INCREMENT PRIMARY KEY,

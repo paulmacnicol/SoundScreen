@@ -317,51 +317,168 @@ const handleRenameArea = async () => {
     });
   };
 
-  function RegisterDevice({ areaId }) {
+  function RegisterDevice({ areaId, onDeviceRegistered }) {
     const [code, setCode] = useState('');
+    const [deviceName, setDeviceName] = useState('');
+    const [isVerified, setIsVerified] = useState(false);
   
-    const handleSubmit = async (e) => {
+    const handleSubmitCode = async (e) => {
       e.preventDefault();
-      // Send code and areaId to backend for verification
       const response = await fetch('/api/verify-device', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, areaId }),
       });
-      // Handle response
       const result = await response.json();
       if (result.success) {
-        alert('Device registered successfully!');
-        // Optionally update device list or state
+        setIsVerified(true);
       } else {
-        alert(result.message || 'Failed to register device.');
+        alert(result.message || 'Failed to verify device.');
       }
     };
   
-    return (
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="Enter 6-digit code"
-          required
-        />
-        <button type="submit">Register Device</button>
-      </form>
-    );
+    const handleSubmitName = async (e) => {
+      e.preventDefault();
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/update-device-name', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code, deviceName, areaId: areaId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        alert('Device registered successfully!');
+        setCode('');
+        setDeviceName('');
+        setIsVerified(false);
+        onDeviceRegistered(); // Refresh device list
+      } else {
+        alert(result.message || 'Failed to update device name.');
+      }
+    };
+    
+  
+    if (!isVerified) {
+      return (
+        <form onSubmit={handleSubmitCode}>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter 6-digit code"
+            required
+          />
+          <button type="submit">Verify Device</button>
+        </form>
+      );
+    } else {
+      return (
+        <form onSubmit={handleSubmitName}>
+          <input
+            type="text"
+            value={deviceName}
+            onChange={(e) => setDeviceName(e.target.value)}
+            placeholder="Enter Device Name"
+            required
+          />
+          <button type="submit">Save Device Name</button>
+        </form>
+      );
+    }
+  }
+  
+
+
+  // Refresh devices function
+  const refreshDevices = () => {
+    if (area) {
+      fetchDevices(area.id);
+    }
+  };
+
+  // RegisterDevice Component
+  function RegisterDevice({ areaId, onDeviceRegistered }) {
+    const [code, setCode] = useState('');
+    const [deviceName, setDeviceName] = useState('');
+    const [isVerified, setIsVerified] = useState(false);
+  
+    const handleSubmitCode = async (e) => {
+      e.preventDefault();
+      const response = await fetch('/api/verify-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, areaId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setIsVerified(true);
+      } else {
+        alert(result.message || 'Failed to verify device.');
+      }
+    };
+  
+    const handleSubmitName = async (e) => {
+      e.preventDefault();
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/update-device-name', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code, deviceName, areaId: areaId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        alert('Device registered successfully!');
+        setCode('');
+        setDeviceName('');
+        setIsVerified(false);
+        onDeviceRegistered(); // Refresh device list
+      } else {
+        alert(result.message || 'Failed to update device name.');
+      }
+    };
+  
+    if (!isVerified) {
+      return (
+        <form onSubmit={handleSubmitCode}>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter 6-digit code"
+            required
+          />
+          <button type="submit">Verify Device</button>
+        </form>
+      );
+    } else {
+      return (
+        <form onSubmit={handleSubmitName}>
+          <input
+            type="text"
+            value={deviceName}
+            onChange={(e) => setDeviceName(e.target.value)}
+            placeholder="Enter Device Name"
+            required
+          />
+          <button type="submit">Save Device Name</button>
+        </form>
+      );
+    }
   }
 
-  <RegisterDevice areaId={area?.id} />
-
-  
-  //Device List with Actions
+  // DeviceList Component with Actions
   function DeviceList({ areaId }) {
     const [devices, setDevices] = useState([]);
   
     useEffect(() => {
-      let isMounted = true; // Track if the component is mounted
-    
+      let isMounted = true;
+  
       if (areaId) {
         // Fetch device list from backend
         const token = localStorage.getItem('token');
@@ -370,7 +487,7 @@ const handleRenameArea = async () => {
         })
           .then((response) => response.json())
           .then((data) => {
-            if (isMounted) { // Only update state if component is mounted
+            if (isMounted) {
               setDevices(data.devices || []);
             }
           })
@@ -380,17 +497,43 @@ const handleRenameArea = async () => {
             }
           });
       }
-    
+  
       return () => {
-        isMounted = false; // Cleanup function to prevent state updates
+        isMounted = false;
       };
     }, [areaId]);
   
+    const handleForgetDevice = (deviceId) => {
+      const token = localStorage.getItem('token');
+      fetch('/api/forget-device', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ deviceId }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.success) {
+            setDevices(devices.filter((device) => device.id !== deviceId));
+          } else {
+            alert(data.message || 'Failed to forget device.');
+          }
+        })
+        .catch((error) => {
+          console.error('Error forgetting device:', error);
+        });
+    };
+  
     const handlePlayVideo = (deviceId) => {
-      // Send command to backend to play video on device
+      const token = localStorage.getItem('token');
       fetch('/api/send-command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ deviceId, command: 'playVideo' }),
       });
     };
@@ -401,115 +544,105 @@ const handleRenameArea = async () => {
           <li key={device.id}>
             {device.name} - {device.status || 'Unknown'}
             <button onClick={() => handlePlayVideo(device.id)}>Play Video</button>
+            <button onClick={() => handleForgetDevice(device.id)}>Forget Device</button>
           </li>
         ))}
       </ul>
     );
   }
-  
-  
 
   return (
+    <div className="control-panel">
+      <h1>Manager's Control Panel</h1>
 
-<div className="control-panel">
-  <h1>Manager's Control Panel</h1>
-
-  <div className="selectors">
-    <h3>Selected Site</h3>
-    <div className="device-selection">
-      <select value={site?.id || ''} onChange={(e) => handleSiteChange(parseInt(e.target.value))}>
-        <option value="" disabled>Select a site</option>
-        {sites.map((site) => (
-          <option key={site.id} value={site.id}>{site.name}</option>
-        ))}
-      </select>
-      <input
-        type="text"
-        value={newSiteName}
-        onChange={(e) => setNewSiteName(e.target.value)}
-        placeholder="New Site Name"
-      />
-      <button onClick={handleAddSite}>Add Site</button>
-      <button onClick={handleRenameSite}>Rename Site</button>
-    </div>
-
-    <h3>Selected Area</h3>
-    <div className="device-selection">
-      <select value={area?.id || ''} onChange={(e) => {
-        const selectedArea = areas.find(a => a.id === parseInt(e.target.value));
-        setArea(selectedArea);
-        if (selectedArea) {
-          fetchDevices(selectedArea.id);
-        }
-      }}>
-        <option value="" disabled>Select an area</option>
-        {areas.map((area) => (
-          <option key={area.id} value={area.id}>{area.name}</option>
-        ))}
-      </select>
-      <input
-        type="text"
-        value={newAreaName}
-        onChange={(e) => setNewAreaName(e.target.value)}
-        placeholder="New Area Name"
-      />
-      <button onClick={handleAddArea}>Add Area</button>
-      <button onClick={handleRenameArea}>Rename Area</button>
-    </div>
-
-    <h3>Devices in Selected Area</h3>
-    <div className="device-selection">
-      <select value={selectedDevice?.id || ''} onChange={(e) => handleDeviceSelection(parseInt(e.target.value))}>
-        <option value="" disabled>Select a device</option>
-        {devices.map((device) => (
-          <option key={device.id} value={device.id}>{device.name}</option>
-        ))}
-      </select>
-      <input
-        type="text"
-        value={newDeviceName}
-        onChange={(e) => setNewDeviceName(e.target.value)}
-        placeholder="New Device Name"
-      />
-      <button onClick={handleAddDevice}>Add Device</button>
-    </div>
-  </div>
-
-  {selectedDevice && (
-    <div className="media-control">
-      <h3>Now Playing on {selectedDevice.name}</h3>
-      {nowPlaying ? (
-        <div className="now-playing">
-          <a href={nowPlaying.link} target="_blank" rel="noopener noreferrer">{nowPlaying.title}</a>
+      <div className="selectors">
+        <h3>Selected Site</h3>
+        <div className="device-selection">
+          <select value={site?.id || ''} onChange={(e) => handleSiteChange(parseInt(e.target.value))}>
+            <option value="" disabled>Select a site</option>
+            {sites.map((site) => (
+              <option key={site.id} value={site.id}>{site.name}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={newSiteName}
+            onChange={(e) => setNewSiteName(e.target.value)}
+            placeholder="New Site Name"
+          />
+          <button onClick={handleAddSite}>Add Site</button>
+          <button onClick={handleRenameSite}>Rename Site</button>
         </div>
-      ) : (
-        <p>No media currently playing</p>
-      )}
 
-      <h4>Up Next</h4>
-      {upNext ? (
-        <div className="up-next">
-          <a href={upNext.link} target="_blank" rel="noopener noreferrer">{upNext.title}</a>
-        </div>
-      ) : (
-        <p>No media in the queue</p>
-      )}
-
-      {/* Mockup Drag-and-Drop Playlist */}
-      <div className="playlist-drag-drop">
-        <h4>Drag Media to Playlist</h4>
-        <div className="playlist">
-          <p>Drag YouTube links here...</p>
+        <h3>Selected Area</h3>
+        <div className="device-selection">
+          <select value={area?.id || ''} onChange={(e) => {
+            const selectedArea = areas.find(a => a.id === parseInt(e.target.value));
+            setArea(selectedArea);
+            if (selectedArea) {
+              fetchDevices(selectedArea.id);
+            }
+          }}>
+            <option value="" disabled>Select an area</option>
+            {areas.map((area) => (
+              <option key={area.id} value={area.id}>{area.name}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={newAreaName}
+            onChange={(e) => setNewAreaName(e.target.value)}
+            placeholder="New Area Name"
+          />
+          <button onClick={handleAddArea}>Add Area</button>
+          <button onClick={handleRenameArea}>Rename Area</button>
         </div>
       </div>
-    </div>
-  )}
-  <RegisterDevice areaId={area?.id} />
-  <DeviceList areaId={area?.id} />
-  
-  {message && <p className="message">{message}</p>}
-</div>
 
+      {/* Register Device Component */}
+      <div className="register-device">
+        <h3>Register a New Device</h3>
+        <RegisterDevice areaId={area?.id} onDeviceRegistered={refreshDevices} />
+      </div>
+
+      {/* Device List Component */}
+      <div className="device-list">
+        <h3>Devices in Selected Area</h3>
+        <DeviceList areaId={area?.id} />
+      </div>
+
+      {selectedDevice && (
+        <div className="media-control">
+          <h3>Now Playing on {selectedDevice.name}</h3>
+          {nowPlaying ? (
+            <div className="now-playing">
+              <a href={nowPlaying.link} target="_blank" rel="noopener noreferrer">{nowPlaying.title}</a>
+            </div>
+          ) : (
+            <p>No media currently playing</p>
+          )}
+
+          <h4>Up Next</h4>
+          {upNext ? (
+            <div className="up-next">
+              <a href={upNext.link} target="_blank" rel="noopener noreferrer">{upNext.title}</a>
+            </div>
+          ) : (
+            <p>No media in the queue</p>
+          )}
+
+          {/* Mockup Drag-and-Drop Playlist */}
+          <div className="playlist-drag-drop">
+            <h4>Drag Media to Playlist</h4>
+            <div className="playlist">
+              <p>Drag YouTube links here...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && <p className="message">{message}</p>}
+    </div>
   );
 }
 

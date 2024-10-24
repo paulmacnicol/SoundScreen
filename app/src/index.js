@@ -1,5 +1,3 @@
-// index.js
-
 // Load environment variables from .env file
 require('dotenv').config();
 
@@ -75,26 +73,51 @@ wss.on('connection', (ws) => {
   let expiration = Date.now() + expirationTime;
 
   // Store the device with its code and expiration time
-  devices[code] = { ws, expiration };
+  devices[code] = { ws, expiration, authenticated: false };
 
   // Send the initial code to the device
   ws.send(JSON.stringify({ action: 'displayCode', code }));
 
-  // Refresh the code every 2 minutes
-  const intervalId = setInterval(() => {
-    const newCode = generateUniqueCode();
-    expiration = Date.now() + expirationTime;
-    devices[newCode] = devices[code];
-    delete devices[code];
-    code = newCode;
-    devices[code].expiration = expiration;
-    ws.send(JSON.stringify({ action: 'displayCode', code: newCode }));
-  }, expirationTime);
+  let intervalId;
+
+  // Define the code refresh function
+  function startCodeRefresh() {
+    intervalId = setInterval(() => {
+      const newCode = generateUniqueCode();
+      expiration = Date.now() + expirationTime;
+      devices[newCode] = devices[code];
+      delete devices[code];
+      code = newCode;
+      devices[code].expiration = expiration;
+      ws.send(JSON.stringify({ action: 'displayCode', code: newCode }));
+    }, expirationTime);
+  }
+
+  // Assign startCodeRefresh to the device object
+  devices[code].startCodeRefresh = startCodeRefresh;
+
+  // Handle incoming messages from the device
+  ws.on('message', (message) => {
+    const data = JSON.parse(message);
+
+    if (data.action === 'deviceInfo') {
+      devices[code].deviceInfo = data;
+    } else if (data.action === 'reconnect' && data.deviceId) {
+      const deviceId = data.deviceId;
+      // Update devicesById with new ws connection
+      devicesById[deviceId] = { ws, authenticated: true };
+      console.log(`Device ${deviceId} reconnected`);
+    }
+  });
 
   // Handle WebSocket close event
   ws.on('close', () => {
-    clearInterval(intervalId);
-    delete devices[code];
+    if (intervalId) {
+      clearInterval(intervalId);
+    }
+    if (!devices[code].authenticated) {
+      delete devices[code];
+    }
   });
 });
 
@@ -104,14 +127,16 @@ app.post('/api/verify-device', (req, res) => {
   const device = devices[code];
 
   if (device && device.expiration > Date.now()) {
-    // Update device status in the database
-    saveDeviceInfo(code, device, areaId);
-
     // Mark the device as authenticated
     devices[code].authenticated = true;
 
-    // Notify the device that it has been authenticated
+    // Notify the device that it has been authenticated and request device name
     device.ws.send(JSON.stringify({ action: 'authenticated' }));
+
+    // Start code refresh after authentication
+    if (typeof device.startCodeRefresh === 'function') {
+      device.startCodeRefresh();
+    }
 
     res.json({ success: true });
   } else {
@@ -120,27 +145,32 @@ app.post('/api/verify-device', (req, res) => {
 });
 
 // Function to save device information into MariaDB
-function saveDeviceInfo(code, device, areaId) {
-  // Placeholder values for device name and type
-  const deviceName = 'New Device'; // You may want to get this from the request or user input
-  const deviceType = 'Unknown';    // Or detect from the device
+function saveDeviceInfo(code, device, areaId, deviceName) {
+  const deviceInfo = device.deviceInfo || {};
+  const userAgent = deviceInfo.userAgent || 'Unknown';
+  const deviceType = userAgent;
+  const screenWidth = deviceInfo.screenResolution?.width || null;
+  const screenHeight = deviceInfo.screenResolution?.height || null;
 
-  const insertDeviceQuery = 'INSERT INTO devices (area_id, name, type, code) VALUES (?, ?, ?, ?)';
-  db.execute(insertDeviceQuery, [areaId, deviceName, deviceType, code], (err, results) => {
+  const insertDeviceQuery = 'INSERT INTO devices (area_id, name, type, screen_width, screen_height, user_agent, code) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  db.execute(insertDeviceQuery, [areaId, deviceName, deviceType, screenWidth, screenHeight, userAgent, code], (err, results) => {
     if (err) {
       console.error('Error saving device info:', err);
-      // Handle error appropriately
     } else {
       const deviceId = results.insertId;
       device.deviceId = deviceId;
 
-      // Map deviceId to the device object for future reference
+      // Map deviceId to the device object
       devicesById[deviceId] = device;
+
+      // Send deviceId back to the device for reconnection purposes
+      device.ws.send(JSON.stringify({ action: 'deviceRegistered', deviceId }));
 
       console.log('Device registered with ID:', deviceId);
     }
   });
 }
+
 
 // Function to retrieve device by ID from in-memory storage
 function getDeviceById(deviceId) {
@@ -148,14 +178,15 @@ function getDeviceById(deviceId) {
 }
 
 // Endpoint to handle commands from the control panel
-app.post('/api/send-command', (req, res) => {
+app.post('/api/send-command', authenticateJWT, (req, res) => {
   const { deviceId, command } = req.body;
-  const device = getDeviceById(deviceId); // Retrieve device info from in-memory storage
+  const device = getDeviceById(deviceId);
 
   if (device && device.ws && device.authenticated) {
-    device.ws.send(JSON.stringify({ action: command }));
+    device.ws.send(JSON.stringify({ action: command, videoUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk' }));
     res.json({ success: true });
   } else {
+    console.error('Device not connected or not authenticated:', deviceId);
     res.status(400).json({ success: false, message: 'Device not connected or not authenticated' });
   }
 });
@@ -169,7 +200,6 @@ app.get('/register', (req, res) => {
 app.get('/device', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'device.html'));
 });
-
 
 // Signup endpoint
 app.post('/api/signup', async (req, res) => {
@@ -397,6 +427,26 @@ app.post('/api/devices', authenticateJWT, (req, res) => {
   });
 });
 
+//Implement /api/update-device-name Endpoint
+app.post('/api/update-device-name', authenticateJWT, (req, res) => {
+  const { code, deviceName, areaId } = req.body;
+  const device = devices[code];
+
+  if (device) {
+    // Save device info with the provided name
+    saveDeviceInfo(code, device, areaId, deviceName);
+
+    // Remove the code from devices since the device is now registered
+    delete devices[code];
+
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ success: false, message: 'Device not found' });
+  }
+});
+
+
+
 //Setup the /register endpoint
 app.get('/register', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'register.html'));
@@ -407,3 +457,24 @@ app.get('/device', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'device.html'));
 });
 
+
+//Implement /api/forget-device Endpoint
+app.post('/api/forget-device', authenticateJWT, (req, res) => {
+  const { deviceId } = req.body;
+
+  const deleteDeviceQuery = 'DELETE FROM devices WHERE id = ?';
+  db.execute(deleteDeviceQuery, [deviceId], (err) => {
+    if (err) {
+      console.error('Error deleting device:', err);
+      res.status(500).json({ success: false, message: 'Database error' });
+    } else {
+      const device = devicesById[deviceId];
+      if (device && device.ws) {
+        device.ws.send(JSON.stringify({ action: 'disconnect' }));
+        device.ws.close();
+        delete devicesById[deviceId];
+      }
+      res.json({ success: true });
+    }
+  });
+});

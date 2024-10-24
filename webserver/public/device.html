@@ -8,29 +8,56 @@
   <p id="status">Waiting for commands...</p>
   <script>
     let ws;
-
+    let deviceId = localStorage.getItem('deviceId');
+  
     function connectWebSocket() {
-      ws = new WebSocket('wss://soundscreen.soundcheckvn.com/device'); // Replace with your server URL
-
+      ws = new WebSocket('wss://soundscreen.soundcheckvn.com/device'); // Use your actual domain
+  
       ws.onopen = () => {
         console.log('WebSocket connection established');
-      };
-
-      ws.onmessage = (message) => {
-        const data = JSON.parse(message.data);
-
-        if (data.action === 'playVideo') {
-          // Open YouTube video in fullscreen
-          window.location.href = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+  
+        if (deviceId) {
+          // Reconnecting device
+          ws.send(JSON.stringify({ action: 'reconnect', deviceId }));
+        } else {
+          // Send device metadata
+          const deviceInfo = {
+            action: 'deviceInfo',
+            screenResolution: {
+              width: window.screen.width,
+              height: window.screen.height,
+            },
+            userAgent: navigator.userAgent,
+            // Add more metadata if needed
+          };
+          ws.send(JSON.stringify(deviceInfo));
         }
       };
-
+  
+      ws.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+  
+        if (data.action === 'authenticated') {
+          document.getElementById('status').innerText = 'Authenticated and ready!';
+        } else if (data.action === 'deviceRegistered') {
+          deviceId = data.deviceId;
+          localStorage.setItem('deviceId', deviceId);
+        } else if (data.action === 'playVideo') {
+          // Open YouTube video in fullscreen
+          window.location.href = data.videoUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+        } else if (data.action === 'disconnect') {
+          localStorage.removeItem('deviceId');
+          window.location.href = '/register';
+        }
+      };
+  
       ws.onclose = () => {
         setTimeout(connectWebSocket, 1000); // Reconnect after 1 second
       };
     }
-
+  
     connectWebSocket();
   </script>
-</body>
+  
+  </body>
 </html>
